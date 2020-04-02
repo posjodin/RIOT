@@ -32,6 +32,7 @@
 #include "at86rf2xx_registers.h"
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_netdev.h"
+#include "at24mac.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -98,11 +99,13 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     if (dev->state == AT86RF2XX_STATE_P_ON) {
         at86rf2xx_set_state(dev, AT86RF2XX_STATE_FORCE_TRX_OFF);
     }
-
+#ifdef MODULE_AT24MAC
+    at24mac_get_eui64(0, &addr_long);
+#else
     /* generate EUI-64 and short address */
     luid_get_eui64(&addr_long);
     luid_get_short(&addr_short);
-
+#endif
     /* set short and long address */
     at86rf2xx_set_addr_long(dev, &addr_long);
     at86rf2xx_set_addr_short(dev, &addr_short);
