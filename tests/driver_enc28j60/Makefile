@@ -7,6 +7,8 @@ USEMODULE += gnrc_icmpv6_echo
 USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps
+USEMODULE += netstats_l2
+USEMODULE += netstats_ipv6
 
 # set board specific peripheral configurations
 ifneq (,$(filter stm32f4discovery,$(BOARD)))
@@ -14,6 +16,12 @@ ifneq (,$(filter stm32f4discovery,$(BOARD)))
   ENC_CS  ?= GPIO_PIN\(PORT_B,12\)
   ENC_INT ?= GPIO_PIN\(PORT_B,11\)
   ENC_RST ?= GPIO_PIN\(PORT_B,10\)
+endif
+
+ifneq (,$(filter avr-rss2,$(BOARD)))
+ENC_CS = GPIO_PIN\(PORT_D,6\)
+ENC_INT = GPIO_PIN\(PORT_D,2\)
+ENC_RST = GPIO_PIN\(PORT_D,7\)
 endif
 
 # fallback: set SPI bus and pins to default values
