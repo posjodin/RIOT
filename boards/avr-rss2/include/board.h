@@ -129,6 +129,13 @@ static inline int _at24mac_get_eui64(const void *arg, eui64_t *addr)
 #define MODULE_ATMEGA_PCINT0
 #define BTN0_PIN            GPIO_PIN(PORT_B, 0)
 #define BTN0_MODE           GPIO_IN
+
+/** @} */
+/**
+ * @name    Generic GPIO Interrupts
+ * @{
+ */
+#define MODULE_ATMEGA_PCINT1
 /** @} */
 
 /**
