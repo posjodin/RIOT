@@ -13,13 +13,21 @@ USEMODULE += gnrc_netdev_default
 USEMODULE += auto_init_gnrc_netif
 # Specify the mandatory networking modules for IPv6 and UDP
 USEMODULE += gnrc_sock_udp
-USEMODULE += gnrc_ipv6_default
+USEMODULE += gnrc_ipv6_router_default
+#USEMODULE += gnrc_ipv6_default
+# Add a routing protocol
+USEMODULE += gnrc_rpl
+USEMODULE += auto_init_gnrc_rpl
 # Include MQTT-SN
 USEMODULE += emcute
 # Add also the shell, some shell commands
 USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps
+USEMODULE += netstats_l2
+USEMODULE += netstats_ipv6
+USEMODULE += netstats_rpl
+
 # For testing we also include the ping6 command and some stats
 USEMODULE += gnrc_icmpv6_echo
 
