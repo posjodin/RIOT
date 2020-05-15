@@ -11,6 +11,7 @@ BOARD_INSUFFICIENT_MEMORY := \
     hifive1 \
     hifive1b \
     i-nucleo-lrwan1 \
+    im880b \
     lobaro-lorabox \
     lsn50 \
     maple-mini \
@@ -31,6 +32,8 @@ BOARD_INSUFFICIENT_MEMORY := \
     nucleo-l031k6 \
     nucleo-l053r8 \
     nucleo-l073rz \
+    nucleo-l412kb \
+    olimexino-stm32 \
     opencm904 \
     saml10-xpro \
     saml11-xpro \

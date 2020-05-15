@@ -44,10 +44,7 @@ QUIET ?= 1
 #
 
 USEMODULE += nanocoap_sock sock_util
-USEMODULE += suit suit_coap
-
-# SUIT draft v4 support:
-USEMODULE += suit_v4
+USEMODULE += suit suit_transport_coap
 
 # Display a progress bar during firmware download
 USEMODULE += progress_bar
@@ -62,7 +59,6 @@ CFLAGS += -DSUIT_MANIFEST_RESOURCE=\"$(SUIT_COAP_ROOT)/$(SUIT_NOTIFY_MANIFEST)\"
 USE_ETHOS ?= 1
 
 ifeq (1,$(USE_ETHOS))
-  GNRC_NETIF_NUMOF := 2
   USEMODULE += stdio_ethos
   USEMODULE += gnrc_uhcpc
 
@@ -96,6 +92,10 @@ TEST_EXTRA_FILES += $(SLOT_RIOT_ELFS) $(SUIT_SEC) $(SUIT_PUB)
 # For now `examples/%/tests" still rely on the test applicaton being reset after
 # a terminal is opened to synchronize.
 TESTRUNNER_RESET_AFTER_TERM ?= 1
+
+# This can be removed as soon as the Pi-fleet runners support an Openssl version
+# with ed25519 support.
+TEST_ON_CI_BLACKLIST = all
 
 include $(RIOTBASE)/Makefile.include
 

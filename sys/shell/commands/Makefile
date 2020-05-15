@@ -84,6 +84,10 @@ ifneq (,$(filter periph_rtc,$(USEMODULE)))
   SRC += sc_rtc.c
 endif
 
+ifneq (,$(filter rtt_cmd,$(USEMODULE)))
+  SRC += sc_rtt.c
+endif
+
 ifneq (,$(filter i2c_scan,$(USEMODULE)))
   SRC += sc_i2c_scan.c
 endif
@@ -96,12 +100,12 @@ ifneq (,$(filter nimble_netif,$(USEMODULE)))
   SRC += sc_nimble_netif.c
 endif
 
-ifneq (,$(filter test_utils_interactive_sync,$(USEMODULE)))
-  SRC += sc_interactive_sync.c
-endif
-
 ifneq (,$(filter suit_coap,$(USEMODULE)))
   SRC += sc_suit.c
+endif
+
+ifneq (,$(filter cryptoauthlib,$(USEPKG)))
+  SRC += sc_cryptoauthlib.c
 endif
 
 include $(RIOTBASE)/Makefile.base

@@ -29,7 +29,13 @@ extern "C" {
 /**
  * @brief   GCLK reference speed
  */
-#define CLOCK_CORECLOCK     (16000000U)
+#define CLOCK_CORECLOCK     (48000000U)
+
+/**
+ * @brief Enable the internal DC/DC converter
+ *        The board is equipped with the necessary inductor.
+ */
+#define USE_VREG_BUCK       (1)
 
 /**
  * @name    Timer peripheral configuration
@@ -42,8 +48,8 @@ static const tc32_conf_t timer_config[] = {
         .mclk           = &MCLK->APBCMASK.reg,
         .mclk_mask      = MCLK_APBCMASK_TC0 | MCLK_APBCMASK_TC1,
         .gclk_id        = TC0_GCLK_ID,
-        .gclk_src       = SAM0_GCLK_MAIN,
-        .prescaler      = TC_CTRLA_PRESCALER(4),
+        .gclk_src       = SAM0_GCLK_8MHZ,
+        .prescaler      = TC_CTRLA_PRESCALER(3),
         .flags          = TC_CTRLA_MODE_COUNT32,
     }
 };
@@ -64,7 +70,7 @@ static const uart_conf_t uart_config[] = {
         .dev      = &SERCOM0->USART,
         .rx_pin   = GPIO_PIN(PA, 5),
         .tx_pin   = GPIO_PIN(PA, 4),
-#ifdef MODULE_SAM0_PERIPH_UART_HW_FC
+#ifdef MODULE_PERIPH_UART_HW_FC
         .rts_pin  = GPIO_UNDEF,
         .cts_pin  = GPIO_UNDEF,
 #endif

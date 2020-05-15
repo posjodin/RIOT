@@ -223,13 +223,13 @@ static void test_nanocoap__get_max_path(void)
     len = coap_opt_add_string(&pkt, COAP_OPT_URI_PATH, &path[0], '/');
     TEST_ASSERT_EQUAL_INT(uri_opt_len, len);
 
-    char uri[NANOCOAP_URI_MAX] = {0};
+    char uri[CONFIG_NANOCOAP_URI_MAX] = {0};
     coap_get_uri_path(&pkt, (uint8_t *)&uri[0]);
     TEST_ASSERT_EQUAL_STRING((char *)path, (char *)uri);
 }
 
 /*
- * Builds on get_req test, to test path longer than NANOCOAP_URI_MAX. We
+ * Builds on get_req test, to test path longer than CONFIG_NANOCOAP_URI_MAX. We
  * expect coap_get_uri_path() to return -ENOSPC.
  */
 static void test_nanocoap__get_path_too_long(void)
@@ -250,7 +250,7 @@ static void test_nanocoap__get_path_too_long(void)
     len = coap_opt_add_string(&pkt, COAP_OPT_URI_PATH, &path[0], '/');
     TEST_ASSERT_EQUAL_INT(uri_opt_len, len);
 
-    char uri[NANOCOAP_URI_MAX] = {0};
+    char uri[CONFIG_NANOCOAP_URI_MAX] = {0};
     int get_len = coap_get_uri_path(&pkt, (uint8_t *)&uri[0]);
     TEST_ASSERT_EQUAL_INT(-ENOSPC, get_len);
 }
@@ -318,9 +318,9 @@ static void test_nanocoap__get_multi_query(void)
 
     uint8_t *query_pos = &pkt.payload[0];
     /* first opt header is 2 bytes long */
-    ssize_t optlen = coap_opt_add_uquery(&pkt, key1, val1);
+    ssize_t optlen = coap_opt_add_uri_query(&pkt, key1, val1);
     TEST_ASSERT_EQUAL_INT(8, optlen);
-    optlen = coap_opt_add_uquery(&pkt, key2, NULL);
+    optlen = coap_opt_add_uri_query(&pkt, key2, NULL);
     TEST_ASSERT_EQUAL_INT(2, optlen);
 
     char query[20] = {0};
@@ -334,7 +334,70 @@ static void test_nanocoap__get_multi_query(void)
     /* skip initial '&' from coap_get_uri_query() */
     TEST_ASSERT_EQUAL_STRING((char *)qs, &query[1]);
 }
+/*
+ * Builds on get_multi_query test, to use coap_opt_add_uri_query2().
+ */
+static void test_nanocoap__add_uri_query2(void)
+{
+    uint8_t buf[_BUF_SIZE];
+    coap_pkt_t pkt;
+    uint16_t msgid = 0xABCD;
+    uint8_t token[2] = {0xDA, 0xEC};
+    char keys[] = "a;bcd;";
+    int key1_len = 1;
+    int key2_len = 3;
+    char vals[] = "do;re";
+    int val1_len = 2;
+    char qs1[] = "a=do";
+    size_t query1_opt_len = 6;    /* first opt header is 2 bytes long */
+    char qs2[] = "a=do&bcd";
+    size_t query2_opt_len = 4;
+    char qs3[] = "a=do&bcd&bcd";
+    size_t query3_opt_len = 4;
 
+    size_t len = coap_build_hdr((coap_hdr_t *)&buf[0], COAP_TYPE_NON,
+                                &token[0], 2, COAP_METHOD_GET, msgid);
+
+    coap_pkt_init(&pkt, &buf[0], sizeof(buf), len);
+
+    /* includes key and value */
+    char query[20] = {0};
+    len = coap_opt_add_uri_query2(&pkt, keys, key1_len, vals, val1_len);
+    TEST_ASSERT_EQUAL_INT(query1_opt_len, len);
+    coap_get_uri_query(&pkt, (uint8_t *)&query[0]);
+    /* skip initial '&' from coap_get_uri_query() */
+    TEST_ASSERT_EQUAL_STRING((char *)qs1, &query[1]);
+
+    /* includes key only */
+    memset(query, 0, 20);
+    len = coap_opt_add_uri_query2(&pkt, &keys[2], key2_len, NULL, 0);
+    TEST_ASSERT_EQUAL_INT(query2_opt_len, len);
+    coap_get_uri_query(&pkt, (uint8_t *)&query[0]);
+    /* skip initial '&' from coap_get_uri_query() */
+    TEST_ASSERT_EQUAL_STRING((char *)qs2, &query[1]);
+
+    /* includes key only; value not NULL but zero length */
+    memset(query, 0, 20);
+    len = coap_opt_add_uri_query2(&pkt, &keys[2], key2_len, &vals[3], 0);
+    TEST_ASSERT_EQUAL_INT(query3_opt_len, len);
+    coap_get_uri_query(&pkt, (uint8_t *)&query[0]);
+    /* skip initial '&' from coap_get_uri_query() */
+    TEST_ASSERT_EQUAL_STRING((char *)qs3, &query[1]);
+
+    /* fails an assert, so only run when disabled */
+#ifdef NDEBUG
+    char qs4[] = "a=do&bcd&bcd&bcd";
+    size_t query4_opt_len = 4;
+
+    /* includes key only; value NULL and length > 0 */
+    memset(query, 0, 20);
+    len = coap_opt_add_uri_query2(&pkt, &keys[2], key2_len, NULL, 1);
+    TEST_ASSERT_EQUAL_INT(query4_opt_len, len);
+    coap_get_uri_query(&pkt, (uint8_t *)&query[0]);
+    /* skip initial '&' from coap_get_uri_query() */
+    TEST_ASSERT_EQUAL_STRING((char *)qs4, &query[1]);
+#endif
+}
 /*
  * Builds on get_req test, to test building a PDU that completely fills the
  * buffer, and one that tries to overfill the buffer.
@@ -472,7 +535,7 @@ static void test_nanocoap__server_option_count_overflow_check(void)
 {
     /* this test passes a forged CoAP packet containing 42 options (provided by
      * @nmeum in #10753, 42 is a random number which just needs to be higher
-     * than NANOCOAP_NOPTS_MAX) to coap_parse().  The used coap_pkt_t is part
+     * than CONFIG_NANOCOAP_NOPTS_MAX) to coap_parse().  The used coap_pkt_t is part
      * of a struct, followed by an array of 42 coap_option_t.  The array is
      * cleared before the call to coap_parse().  If the overflow protection is
      * working, the array must still be clear after parsing the packet, and the
@@ -490,8 +553,8 @@ static void test_nanocoap__server_option_count_overflow_check(void)
         0x11, 0x17, 0x11, 0x17, 0x11, 0x17, 0x11, 0x17, 0x11, 0x17, 0x11, 0x17,
         0x11, 0x17, 0x11, 0x17 };
 
-    /* ensure NANOCOAP_NOPTS_MAX is actually lower than 42 */
-    TEST_ASSERT(NANOCOAP_NOPTS_MAX < 42);
+    /* ensure CONFIG_NANOCOAP_NOPTS_MAX is actually lower than 42 */
+    TEST_ASSERT(CONFIG_NANOCOAP_NOPTS_MAX < 42);
 
     struct {
       coap_pkt_t pkt;
@@ -525,7 +588,7 @@ static void test_nanocoap__server_option_count_overflow(void)
      * path, but only 1 entry in the options array.
      * Size buf to accept an extra 2-byte option */
     unsigned base_len = 17;
-    uint8_t buf[17 + (2 * NANOCOAP_NOPTS_MAX)] = {
+    uint8_t buf[17 + (2 * CONFIG_NANOCOAP_NOPTS_MAX)] = {
         0x42, 0x01, 0xbe, 0x16, 0x35, 0x61, 0xb4, 0x72,
         0x69, 0x6f, 0x74, 0x05, 0x76, 0x61, 0x6c, 0x75,
         0x65
@@ -537,7 +600,7 @@ static void test_nanocoap__server_option_count_overflow(void)
 
     /* fill pkt with maximum options; should succeed */
     int i = 0;
-    for (; i < (2 * (NANOCOAP_NOPTS_MAX - 1)); i+=2) {
+    for (; i < (2 * (CONFIG_NANOCOAP_NOPTS_MAX - 1)); i+=2) {
         memcpy(&buf[base_len+i], fill_opt, 2);
     }
 
@@ -663,6 +726,7 @@ Test *tests_nanocoap_tests(void)
         new_TestFixture(test_nanocoap__get_path_too_long),
         new_TestFixture(test_nanocoap__get_query),
         new_TestFixture(test_nanocoap__get_multi_query),
+        new_TestFixture(test_nanocoap__add_uri_query2),
         new_TestFixture(test_nanocoap__option_add_buffer_max),
         new_TestFixture(test_nanocoap__options_get_opaque),
         new_TestFixture(test_nanocoap__options_iterate),

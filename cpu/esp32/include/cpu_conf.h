@@ -23,6 +23,8 @@
 #define CPU_CONF_H
 
 #include <stdint.h>
+
+#include "cpu_conf_common.h"
 #include "esp_common_log.h"
 #include "xtensa_conf.h"
 #include "xtensa/xtensa_context.h"
@@ -32,23 +34,34 @@ extern "C" {
 #endif
 
 /**
- * @brief   Declare the heap_stats function as available
- */
-#define HAVE_HEAP_STATS
-
-/**
  * @name   Stack size configuration
  * @{
  */
 #define THREAD_EXTRA_STACKSIZE_PRINTF (1024)
+#ifndef THREAD_STACKSIZE_DEFAULT
 #define THREAD_STACKSIZE_DEFAULT      (2048)
+#endif
+#ifndef THREAD_STACKSIZE_IDLE
 #define THREAD_STACKSIZE_IDLE         (2048)
+#endif
 /** @} */
 
 /**
  * Buffer size used for printf functions (maximum length of formatted output).
  */
 #define PRINTF_BUFSIZ 256
+
+/**
+ * @brief   Memory marked with this attribute is retained during deep sleep
+ *          and initialized with 0 on cold boot.
+ */
+#define BACKUP_RAM      __attribute__((section(".rtc.bss")))
+
+/**
+ * @brief   Memory marked with this attribute is retained during deep sleep
+ *          and initialized with user provided data on cold boot.
+ */
+#define BACKUP_RAM_DATA __attribute__((section(".rtc.data")))
 
 #ifdef __cplusplus
 }

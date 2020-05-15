@@ -494,9 +494,10 @@ static void _netif_list(netif_t *iface)
         printf(" CR: %s ", _netopt_coding_rate_str[u8]);
     }
 #endif
-    res = netif_get_opt(iface, NETOPT_LINK, 0, &u8, sizeof(u8));
+    netopt_enable_t link;
+    res = netif_get_opt(iface, NETOPT_LINK, 0, &link, sizeof(netopt_enable_t));
     if (res >= 0) {
-        printf(" Link: %s ", (netopt_enable_t)u8 ? "up" : "down" );
+        printf(" Link: %s ", (link == NETOPT_ENABLE) ? "up" : "down" );
     }
     line_thresh = _newline(0U, line_thresh);
     res = netif_get_opt(iface, NETOPT_ADDRESS_LONG, 0, hwaddr, sizeof(hwaddr));
@@ -1401,7 +1402,7 @@ int _gnrc_netif_send(int argc, char **argv)
     nethdr = (gnrc_netif_hdr_t *)hdr->data;
     nethdr->flags = flags;
     /* and send it */
-    if (gnrc_netapi_send(((gnrc_netif_t *)iface)->pid, pkt) < 1) {
+    if (gnrc_netif_send((gnrc_netif_t *)iface, pkt) < 1) {
         puts("error: unable to send");
         gnrc_pktbuf_release(pkt);
         return 1;

@@ -6,7 +6,6 @@
  * directory for more details.
  */
 
-
 #ifndef CPU_CONF_H
 #define CPU_CONF_H
 
@@ -48,7 +47,9 @@ extern "C" {
 #define THREAD_STACKSIZE_DEFAULT   (1024)
 #endif
 
+#ifndef THREAD_STACKSIZE_IDLE
 #define THREAD_STACKSIZE_IDLE      (160)
+#endif
 /** @} */
 
 /**
@@ -93,7 +94,9 @@ extern "C" {
  * @brief   Stack size used for the interrupt (ISR) stack
  * @{
  */
+#ifndef ISR_STACKSIZE
 #define ISR_STACKSIZE                   (400)
+#endif
 /** @} */
 
 /**
@@ -122,6 +125,18 @@ extern "C" {
  *          (primary RAM, USB RAM, Ethernet RAM & Backup RAM)
  */
 #define NUM_HEAPS (4)
+
+/**
+ * @brief   Memory marked with this attribute is retained during deep sleep
+ *          and initialized with 0 on cold boot.
+ */
+#define BACKUP_RAM      __attribute__((section(".backup.bss")))
+
+/**
+ * @brief   Memory marked with this attribute is retained during deep sleep
+ *          and initialized with user provided data on cold boot.
+ */
+#define BACKUP_RAM_DATA __attribute__((section(".backup.data")))
 
 #ifdef __cplusplus
 }

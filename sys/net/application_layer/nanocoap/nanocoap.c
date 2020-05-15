@@ -108,7 +108,7 @@ int coap_parse(coap_pkt_t *pkt, uint8_t *buf, size_t len)
             DEBUG("option count=%u nr=%u len=%i\n", option_count, option_nr, option_len);
 
             if (option_delta) {
-                if (option_count >= NANOCOAP_NOPTS_MAX) {
+                if (option_count >= CONFIG_NANOCOAP_NOPTS_MAX) {
                     DEBUG("nanocoap: max nr of options exceeded\n");
                     return -ENOMEM;
                 }
@@ -206,7 +206,7 @@ static uint8_t *_parse_option(const coap_pkt_t *pkt,
     return pkt_pos;
 }
 
-ssize_t coap_opt_get_opaque(coap_pkt_t *pkt, unsigned opt_num, uint8_t **value)
+ssize_t coap_opt_get_opaque(const coap_pkt_t *pkt, unsigned opt_num, uint8_t **value)
 {
     uint8_t *start = coap_find_option(pkt, opt_num);
     if (!start) {
@@ -384,17 +384,25 @@ ssize_t coap_handle_req(coap_pkt_t *pkt, uint8_t *resp_buf, unsigned resp_buf_le
     if (pkt->hdr->code == 0) {
         return coap_build_reply(pkt, COAP_CODE_EMPTY, resp_buf, resp_buf_len, 0);
     }
+    return coap_tree_handler(pkt, resp_buf, resp_buf_len, coap_resources,
+                             coap_resources_numof);
+}
 
+ssize_t coap_tree_handler(coap_pkt_t *pkt, uint8_t *resp_buf,
+                          unsigned resp_buf_len,
+                          const coap_resource_t *resources,
+                          size_t resources_numof)
+{
     coap_method_flags_t method_flag = coap_method2flag(coap_get_code_detail(pkt));
 
-    uint8_t uri[NANOCOAP_URI_MAX];
+    uint8_t uri[CONFIG_NANOCOAP_URI_MAX];
     if (coap_get_uri_path(pkt, uri) <= 0) {
         return -EBADMSG;
     }
     DEBUG("nanocoap: URI path: \"%s\"\n", uri);
 
-    for (unsigned i = 0; i < coap_resources_numof; i++) {
-        const coap_resource_t *resource = &coap_resources[i];
+    for (unsigned i = 0; i < resources_numof; i++) {
+        const coap_resource_t *resource = &resources[i];
         if (!(resource->methods & method_flag)) {
             continue;
         }
@@ -775,7 +783,7 @@ size_t coap_opt_put_uint(uint8_t *buf, uint16_t lastonum, uint16_t onum,
 static ssize_t _add_opt_pkt(coap_pkt_t *pkt, uint16_t optnum, const uint8_t *val,
                             size_t val_len)
 {
-    if (pkt->options_len >= NANOCOAP_NOPTS_MAX) {
+    if (pkt->options_len >= CONFIG_NANOCOAP_NOPTS_MAX) {
         return -ENOSPC;
     }
 
@@ -846,27 +854,30 @@ ssize_t coap_opt_add_string(coap_pkt_t *pkt, uint16_t optnum, const char *string
     return write_len;
 }
 
-ssize_t coap_opt_add_uquery(coap_pkt_t *pdu, const char *key, const char *val)
+ssize_t coap_opt_add_uri_query2(coap_pkt_t *pkt, const char *key, size_t key_len,
+                                const char *val, size_t val_len)
 {
-    char qs[NANOCOAP_QS_MAX];
-    size_t len = strlen(key);
-    size_t val_len = (val) ? (strlen(val) + 1) : 0;
+    assert(pkt);
+    assert(key);
+    assert(key_len);
+    assert(!val_len || (val && val_len));
 
-    /* test if the query string fits, account for the zero termination */
-    if ((len + val_len + 1) >= NANOCOAP_QS_MAX) {
+    char qs[CONFIG_NANOCOAP_QS_MAX];
+    /* length including '=' */
+    size_t qs_len = key_len + ((val && val_len) ? (val_len + 1) : 0);
+
+    /* test if the query string fits */
+    if (qs_len > CONFIG_NANOCOAP_QS_MAX) {
         return -1;
     }
 
-    memcpy(&qs[0], key, len);
-    if (val) {
-        qs[len] = '=';
-        /* the `=` character was already counted in `val_len`, so subtract it here */
-        memcpy(&qs[len + 1], val, (val_len - 1));
-        len += val_len;
+    memcpy(&qs[0], key, key_len);
+    if (val && val_len) {
+        qs[key_len] = '=';
+        memcpy(&qs[key_len + 1], val, val_len);
     }
-    qs[len] = '\0';
 
-    return coap_opt_add_string(pdu, COAP_OPT_URI_QUERY, qs, '&');
+    return _add_opt_pkt(pkt, COAP_OPT_URI_QUERY, (uint8_t *)qs, qs_len);
 }
 
 ssize_t coap_opt_add_opaque(coap_pkt_t *pkt, uint16_t optnum, const uint8_t *val, size_t val_len)
@@ -887,6 +898,14 @@ ssize_t coap_opt_add_block(coap_pkt_t *pkt, coap_block_slicer_t *slicer,
     slicer->opt = pkt->payload;
 
     return coap_opt_add_uint(pkt, option, _slicer2blkopt(slicer, more));
+}
+
+ssize_t coap_opt_add_proxy_uri(coap_pkt_t *pkt, const char *uri)
+{
+    assert(pkt);
+    assert(uri);
+
+    return _add_opt_pkt(pkt, COAP_OPT_PROXY_URI, (uint8_t *)uri, strlen(uri));
 }
 
 ssize_t coap_opt_finish(coap_pkt_t *pkt, uint16_t flags)
@@ -932,8 +951,8 @@ void coap_block2_init(coap_pkt_t *pkt, coap_block_slicer_t *slicer)
     if (coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &blknum, &szx) >= 0) {
         /* Use the client requested block size if it is smaller than our own
          * maximum block size */
-        if (NANOCOAP_BLOCK_SIZE_EXP_MAX - 4 < szx) {
-            szx = NANOCOAP_BLOCK_SIZE_EXP_MAX - 4;
+        if (CONFIG_NANOCOAP_BLOCK_SIZE_EXP_MAX - 4 < szx) {
+            szx = CONFIG_NANOCOAP_BLOCK_SIZE_EXP_MAX - 4;
         }
     }
 

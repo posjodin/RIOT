@@ -1,5 +1,6 @@
 PSEUDOMODULES += at_urc
 PSEUDOMODULES += at24c%
+PSEUDOMODULES += base64url
 PSEUDOMODULES += can_mbox
 PSEUDOMODULES += can_pm
 PSEUDOMODULES += can_raw
@@ -9,6 +10,7 @@ PSEUDOMODULES += cord_ep_standalone
 PSEUDOMODULES += core_%
 PSEUDOMODULES += cortexm_fpu
 PSEUDOMODULES += cpu_check_address
+PSEUDOMODULES += crypto_%	# crypto_aes or crypto_3des
 PSEUDOMODULES += devfs_%
 PSEUDOMODULES += dhcpv6_%
 PSEUDOMODULES += ecc_%
@@ -49,12 +51,14 @@ PSEUDOMODULES += ina3221_alerts
 PSEUDOMODULES += l2filter_blacklist
 PSEUDOMODULES += l2filter_whitelist
 PSEUDOMODULES += lis2dh12_i2c
+PSEUDOMODULES += lis2dh12_int
 PSEUDOMODULES += lis2dh12_spi
 PSEUDOMODULES += log
 PSEUDOMODULES += log_printfnoformat
 PSEUDOMODULES += log_color
 PSEUDOMODULES += lora
 PSEUDOMODULES += mpu_stack_guard
+PSEUDOMODULES += mpu_noexec_ram
 PSEUDOMODULES += nanocoap_%
 PSEUDOMODULES += netdev_default
 PSEUDOMODULES += netstats
@@ -74,6 +78,7 @@ PSEUDOMODULES += prng
 PSEUDOMODULES += prng_%
 PSEUDOMODULES += qmc5883l_int
 PSEUDOMODULES += riotboot_%
+PSEUDOMODULES += rtt_cmd
 PSEUDOMODULES += saul_adc
 PSEUDOMODULES += saul_default
 PSEUDOMODULES += saul_gpio
@@ -81,6 +86,7 @@ PSEUDOMODULES += saul_nrf_temperature
 PSEUDOMODULES += scanf_float
 PSEUDOMODULES += sched_cb
 PSEUDOMODULES += semtech_loramac_rx
+PSEUDOMODULES += slipdev_stdio
 PSEUDOMODULES += sock
 PSEUDOMODULES += sock_async
 PSEUDOMODULES += sock_dtls
@@ -91,12 +97,13 @@ PSEUDOMODULES += stdin
 PSEUDOMODULES += stdio_ethos
 PSEUDOMODULES += stdio_cdc_acm
 PSEUDOMODULES += stdio_uart_rx
-PSEUDOMODULES += suit_%
+PSEUDOMODULES += suit_transport_%
 PSEUDOMODULES += wakaama_objects_%
 PSEUDOMODULES += zptr
+PSEUDOMODULES += ztimer%
 
-# handle suit_v4 being a distinct module
-NO_PSEUDOMODULES += suit_v4
+# ztimer's main module is called "ztimer_core"
+NO_PSEUDOMODULES += ztimer_core
 
 # print ascii representation in function od_hex_dump()
 PSEUDOMODULES += od_string
@@ -109,6 +116,12 @@ PSEUDOMODULES += at86rf23%
 PSEUDOMODULES += at86rf21%
 PSEUDOMODULES += at86rfa1
 PSEUDOMODULES += at86rfr2
+NO_PSEUDOMODULES += at86rf215
+
+# include variants of the BME680 drivers as pseudo modules
+PSEUDOMODULES += bme680_i2c
+PSEUDOMODULES += bme680_spi
+PSEUDOMODULES += bme680_fp
 
 # include variants of the BMX280 drivers as pseudo modules
 PSEUDOMODULES += bmp280_i2c
@@ -121,6 +134,14 @@ PSEUDOMODULES += adc081c
 PSEUDOMODULES += adc101c
 PSEUDOMODULES += adc121c
 
+# include variants of APDS99XX drivers as pseudo modules
+PSEUDOMODULES += apds9900
+PSEUDOMODULES += apds9901
+PSEUDOMODULES += apds9930
+PSEUDOMODULES += apds9950
+PSEUDOMODULES += apds9960
+PSEUDOMODULES += apds99xx_full
+
 # full featured version of CCS811 driver as pseudo module
 PSEUDOMODULES += ccs811_full
 
@@ -128,6 +149,9 @@ PSEUDOMODULES += ccs811_full
 PSEUDOMODULES += cc1100
 PSEUDOMODULES += cc1100e
 PSEUDOMODULES += cc1101
+
+# interrupt variant of the HMC5883L driver
+PSEUDOMODULES += hmc5883l_int
 
 # interrupt variant of the ITG320X driver as pseudo module
 PSEUDOMODULES += itg320x_int
@@ -206,12 +230,13 @@ PSEUDOMODULES += crypto_aes_precalculated
 # This pseudomodule causes a loop in AES to be unrolled (more flash, less CPU)
 PSEUDOMODULES += crypto_aes_unroll
 
+# declare shell version of test_utils_interactive_sync
+PSEUDOMODULES += test_utils_interactive_sync_shell
+
 # All auto_init modules are pseudomodules
 PSEUDOMODULES += auto_init_%
 NO_PSEUDOMODULES += auto_init_can
 NO_PSEUDOMODULES += auto_init_loramac
-NO_PSEUDOMODULES += auto_init_gnrc_netif
-NO_PSEUDOMODULES += auto_init_saul
 NO_PSEUDOMODULES += auto_init_security
 NO_PSEUDOMODULES += auto_init_storage
 NO_PSEUDOMODULES += auto_init_usbus

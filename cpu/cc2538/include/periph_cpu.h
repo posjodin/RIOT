@@ -53,10 +53,10 @@ typedef uint32_t gpio_t;
 /** @} */
 
 /**
- * @name    Power management configuration
+ * @name    Power mode configuration
  * @{
  */
-#define PROVIDES_PM_SET_LOWEST_CORTEXM
+#define PM_NUM_MODES        (4)
 /** @} */
 
 /**
@@ -167,8 +167,10 @@ typedef struct {
     cc2538_uart_t *dev;       /**< pointer to the used UART device */
     gpio_t rx_pin;            /**< pin used for RX */
     gpio_t tx_pin;            /**< pin used for TX */
+#ifdef MODULE_PERIPH_UART_HW_FC
     gpio_t cts_pin;           /**< CTS pin - set to GPIO_UNDEF when not using */
     gpio_t rts_pin;           /**< RTS pin - set to GPIO_UNDEF when not using */
+#endif
 } uart_conf_t;
 /** @} */
 
@@ -341,13 +343,7 @@ typedef gpio_t adc_conf_t;
 #define RTT_IRQ_PRIO        1
 #define RTT_ISR             isr_sleepmode
 #define RTT_MAX_VALUE       (0xffffffff)
-#if SYS_CTRL_OSC32K_USE_XTAL
-/* Frequency of XOSC off by default */
-#define RTT_FREQUENCY       (32768U)    /* in Hz. For changes see `rtt.c` */
-#else
-/* Frequency of RCOSC on by default */
-#define RTT_FREQUENCY       (32753U)    /* in Hz. For changes see `rtt.c` */
-#endif
+#define RTT_FREQUENCY       (CLOCK_OSC32K)
 /** @} */
 
 /**

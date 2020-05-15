@@ -18,6 +18,7 @@
  * @}
  */
 
+#include <kernel_defines.h>
 #include <stdio.h>
 
 #include "byteorder.h"
@@ -35,6 +36,7 @@
 #include "net/netdev_test.h"
 #include "net/netopt.h"
 #include "sched.h"
+#include "test_utils/expect.h"
 
 #include "net/gnrc/ndp.h"
 
@@ -66,6 +68,7 @@ static const ipv6_addr_t test_pfx = { { 0x47, 0x25, 0xd9, 0x3b, 0x7f, 0xcc, 0x15
 static const uint8_t test_src_l2[] = { 0xe7, 0x43, 0xb7, 0x74, 0xd7, 0xa9, 0x30, 0x74 };
 
 static gnrc_netif_t *test_netif = NULL;
+static gnrc_netif_t _netif;
 
 static void init_pkt_handler(void);
 static inline size_t ceil8(size_t size);
@@ -886,7 +889,7 @@ static void test_rtr_sol_send__pktbuf_full4(void)
     TEST_ASSERT(gnrc_pktbuf_is_empty());
 }
 
-#if GNRC_IPV6_NIB_CONF_ROUTER
+#if IS_ACTIVE(CONFIG_GNRC_IPV6_NIB_ROUTER)
 static void test_rtr_adv_send(const ipv6_addr_t *src, const ipv6_addr_t *dst,
                               bool fin, gnrc_pktsnip_t *exp_ext_opts)
 {
@@ -1154,7 +1157,7 @@ static Test *tests_gnrc_ndp_send(void)
         new_TestFixture(test_rtr_sol_send__pktbuf_full2),
         new_TestFixture(test_rtr_sol_send__pktbuf_full3),
         new_TestFixture(test_rtr_sol_send__pktbuf_full4),
-#if GNRC_IPV6_NIB_CONF_ROUTER
+#if IS_ACTIVE(CONFIG_GNRC_IPV6_NIB_ROUTER)
         new_TestFixture(test_rtr_adv_send__src_NULL_dst_NULL_no_fin_no_ext_opts),
         new_TestFixture(test_rtr_adv_send__src_NULL_dst_NULL_no_fin_ext_opts),
         new_TestFixture(test_rtr_adv_send__src_NULL_dst_NULL_fin_no_ext_opts),
@@ -1231,7 +1234,7 @@ static const gnrc_netif_ops_t _test_netif_ops = {
 static int _netdev_test_address_long(netdev_t *dev, void *value, size_t max_len)
 {
     (void)dev;
-    assert(max_len >= sizeof(test_src_l2));
+    expect(max_len >= sizeof(test_src_l2));
     memcpy(value, test_src_l2, sizeof(test_src_l2));
     return sizeof(test_src_l2);
 }
@@ -1239,7 +1242,7 @@ static int _netdev_test_address_long(netdev_t *dev, void *value, size_t max_len)
 static int _netdev_test_proto(netdev_t *dev, void *value, size_t max_len)
 {
     (void)dev;
-     assert(max_len == sizeof(gnrc_nettype_t));
+     expect(max_len == sizeof(gnrc_nettype_t));
      *((gnrc_nettype_t *)value) = GNRC_NETTYPE_UNDEF;
      return sizeof(gnrc_nettype_t);
 }
@@ -1247,7 +1250,7 @@ static int _netdev_test_proto(netdev_t *dev, void *value, size_t max_len)
 static int _netdev_test_src_len(netdev_t *dev, void *value, size_t max_len)
 {
     (void)dev;
-     assert(max_len == sizeof(uint16_t));
+     expect(max_len == sizeof(uint16_t));
      *((uint16_t *)value) = sizeof(test_src_l2);
      return sizeof(uint16_t);
 }
@@ -1255,7 +1258,7 @@ static int _netdev_test_src_len(netdev_t *dev, void *value, size_t max_len)
 static int _netdev_test_max_pdu_size(netdev_t *dev, void *value, size_t max_len)
 {
     (void)dev;
-     assert(max_len == sizeof(uint16_t));
+     expect(max_len == sizeof(uint16_t));
      *((uint16_t *)value) = 100U;
      return sizeof(uint16_t);
 }
@@ -1263,7 +1266,7 @@ static int _netdev_test_max_pdu_size(netdev_t *dev, void *value, size_t max_len)
 static int _netdev_test_device_type(netdev_t *dev, void *value, size_t max_len)
 {
     (void)dev;
-     assert(max_len == sizeof(uint16_t));
+     expect(max_len == sizeof(uint16_t));
      *((uint16_t *)value) = NETDEV_TYPE_IEEE802154;
      return sizeof(uint16_t);
 }
@@ -1282,10 +1285,11 @@ static void init_pkt_handler(void)
     netdev_test_set_get_cb(&dev, NETOPT_MAX_PDU_SIZE,
                            _netdev_test_max_pdu_size);
     netdev_test_set_get_cb(&dev, NETOPT_DEVICE_TYPE, _netdev_test_device_type);
-    test_netif = gnrc_netif_create(test_netif_stack, sizeof(test_netif_stack),
+    int res = gnrc_netif_create(&_netif, test_netif_stack, sizeof(test_netif_stack),
                                    GNRC_NETIF_PRIO, "test-netif",
                                    &dev.netdev.netdev, &_test_netif_ops);
-    TEST_ASSERT_MESSAGE(test_netif != NULL,
+    test_netif = &_netif;
+    TEST_ASSERT_MESSAGE(res == 0,
                         "Unable to start test interface");
     memcpy(&test_netif->ipv6.addrs[0], &test_src,
            sizeof(test_netif->ipv6.addrs[0]));

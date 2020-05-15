@@ -20,6 +20,8 @@
 #ifndef NET_GNRC_NETIF_CONF_H
 #define NET_GNRC_NETIF_CONF_H
 
+#include <kernel_defines.h>
+
 #include "net/ieee802154.h"
 #include "net/ethernet/hdr.h"
 #include "net/gnrc/ipv6/nib/conf.h"
@@ -30,13 +32,15 @@ extern "C" {
 #endif
 
 /**
- * @brief   Maximum number of network interfaces
+ * @brief   Single interface optimizations
  *
- * @note    Intentionally not calling it `GNRC_NETIF_NUMOF` to not require
- *          rewrites throughout the stack.
+ *          Define to 1 to allow GNRC optimizations when only one interface
+ *          is available.
+ *
+ * @note    This MUST NOT be enabled if there's more than one interface.
  */
-#ifndef GNRC_NETIF_NUMOF
-#define GNRC_NETIF_NUMOF            (1)
+#if DOXYGEN
+#define GNRC_NETIF_SINGLE
 #endif
 
 /**
@@ -74,7 +78,7 @@ extern "C" {
  *
  * @note    Used for calculation of @ref GNRC_NETIF_IPV6_GROUPS_NUMOF
  */
-#if GNRC_IPV6_NIB_CONF_ROUTER
+#if IS_ACTIVE(CONFIG_GNRC_IPV6_NIB_ROUTER)
 #define GNRC_NETIF_IPV6_RTR_ADDR   (1)
 #else
 #define GNRC_NETIF_IPV6_RTR_ADDR   (0)
@@ -129,7 +133,7 @@ extern "C" {
 #elif   MODULE_CC110X
 #define GNRC_NETIF_L2ADDR_MAXLEN   (1U)
 #else
-#define GNRC_NETIF_L2ADDR_MAXLEN   (GNRC_IPV6_NIB_L2ADDR_MAX_LEN)
+#define GNRC_NETIF_L2ADDR_MAXLEN   (CONFIG_GNRC_IPV6_NIB_L2ADDR_MAX_LEN)
 #endif
 #endif
 

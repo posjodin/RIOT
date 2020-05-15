@@ -32,12 +32,20 @@ extern "C" {
 #define CPU_BACKUP_RAM_NOT_RETAINED (1)
 
 /**
+ * @name    Power mode configuration
+ * @{
+ */
+#define PM_NUM_MODES        (2)
+/** @} */
+
+/**
  * @name   SAML21 GCLK definitions
  * @{
  */
 enum {
-    SAM0_GCLK_MAIN = 0,                 /**< 16 MHz main clock      */
-    SAM0_GCLK_32KHZ,                    /**< 32 kHz clock           */
+    SAM0_GCLK_MAIN  = 0,                 /**< Main clock */
+    SAM0_GCLK_8MHZ  = 1,                 /**< 8MHz clock */
+    SAM0_GCLK_32KHZ = 2,                 /**< 32 kHz clock */
 };
 /** @} */
 

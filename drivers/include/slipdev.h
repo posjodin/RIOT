@@ -33,6 +33,11 @@ extern "C" {
 #endif
 
 /**
+ * @defgroup drivers_slipdev_config     SLIP Network driver compile configuration
+ * @ingroup config_drivers_netdev
+ * @{
+ */
+/**
  * @brief   UART buffer size used for TX and RX buffers
  *
  * Reduce this value if your expected traffic does not include full IPv6 MTU
@@ -43,6 +48,28 @@ extern "C" {
 #ifndef SLIPDEV_BUFSIZE
 #define SLIPDEV_BUFSIZE (2048U)
 #endif
+/** @} */
+
+/**
+ * @name    Device state definitions
+ * @anchor  drivers_slipdev_states
+ * @{
+ */
+enum {
+    /**
+     * @brief   Device is in no mode (currently did not receiving any data frame)
+     */
+    SLIPDEV_STATE_NONE = 0,
+    /**
+     * @brief   Device writes handles data as network device
+     */
+    SLIPDEV_STATE_NET,
+    /**
+     * @brief   Device writes received data to stdin
+     */
+    SLIPDEV_STATE_STDIN,
+};
+/** @} */
 
 /**
  * @brief   Configuration parameters for a slipdev
@@ -62,8 +89,11 @@ typedef struct {
     slipdev_params_t config;                /**< configuration parameters */
     tsrb_t inbuf;                           /**< RX buffer */
     uint8_t rxmem[SLIPDEV_BUFSIZE];         /**< memory used by RX buffer */
-    uint16_t inesc;                         /**< device previously received an escape
-                                             *   byte */
+    /**
+     * @brief   Device state
+     * @see     [Device state definitions](@ref drivers_slipdev_states)
+     */
+    uint8_t state;
 } slipdev_t;
 
 /**

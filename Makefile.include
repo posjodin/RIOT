@@ -353,18 +353,11 @@ include $(RIOTMAKE)/toolchain/$(TOOLCHAIN).inc.mk
 # For more information, see http://petereisentraut.blogspot.com/2011/09/ccache-and-clang-part-2.html
 export CCACHE_CPP2=yes
 
-# get number of interfaces straight before resolving dependencies
-GNRC_NETIF_NUMOF ?= 1
-
-ifneq ($(GNRC_NETIF_NUMOF),1)
-  CFLAGS += -DGNRC_NETIF_NUMOF=$(GNRC_NETIF_NUMOF)
-endif
-
 # handle removal of default modules
 USEMODULE += $(filter-out $(DISABLE_MODULE), $(DEFAULT_MODULE))
 
 # process dependencies
-include $(RIOTBASE)/Makefile.dep
+include $(RIOTMAKE)/dependency_resolution.inc.mk
 
 ifeq ($(strip $(MCU)),)
 	MCU = $(CPU)
@@ -479,6 +472,10 @@ endif
 ELFFILE ?= $(BINDIR)/$(APPLICATION).elf
 HEXFILE ?= $(ELFFILE:.elf=.hex)
 BINFILE ?= $(ELFFILE:.elf=.bin)
+
+ifneq (,$(filter suit, $(USEMODULE)))
+  include $(RIOTMAKE)/suit.base.inc.mk
+endif
 
 # include bootloaders support. It should be included early to allow using
 # variables defined in `riotboot.mk` for `FLASHFILE` before it is evaluated.
@@ -686,7 +683,7 @@ term: $(TERMDEPS)
 
 # Term without the pyterm added logging
 # PYTERMFLAGS must be exported for `jlink.sh term-rtt`.
-cleanterm: export PYTERMFLAGS += --noprefix --no-repeat-command-on-empty-line
+cleanterm: export PYTERMFLAGS += --no-reconnect --noprefix --no-repeat-command-on-empty-line
 cleanterm: $(TERMDEPS)
 	$(call check_cmd,$(TERMPROG),Terminal program)
 	$(TERMPROG) $(TERMFLAGS)

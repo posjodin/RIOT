@@ -234,8 +234,19 @@ struct gnrc_netif_ops {
 };
 
 /**
+ * @brief   Initialize all available network interfaces.
+ *          This function is called automatically if the auto_init_gnrc_netif
+ *          module is used.
+ *          If only the gnrc_netif_init module is used instead, you can call
+ *          this function to manually set up the network interfaces at a later
+ *          time.
+ */
+void gnrc_netif_init_devs(void);
+
+/**
  * @brief   Creates a network interface
  *
+ * @param[out] netif    The interface. May not be `NULL`.
  * @param[in] stack     The stack for the network interface's thread.
  * @param[in] stacksize Size of @p stack.
  * @param[in] priority  Priority for the network interface's thread.
@@ -246,15 +257,12 @@ struct gnrc_netif_ops {
  * @note If @ref DEVELHELP is defined netif_params_t::name is used as the
  *       name of the network interface's thread.
  *
- * @attention   Fails and crashes (assertion error with @ref DEVELHELP or
- *              segmentation fault without) if `GNRC_NETIF_NUMOF` is lower than
- *              the number of calls to this function.
- *
- * @return  The network interface on success.
+ * @return  0 on success
+ * @return  negative number on error
  */
-gnrc_netif_t *gnrc_netif_create(char *stack, int stacksize, char priority,
-                                const char *name, netdev_t *dev,
-                                const gnrc_netif_ops_t *ops);
+int gnrc_netif_create(gnrc_netif_t *netif, char *stack, int stacksize,
+                      char priority, const char *name, netdev_t *dev,
+                      const gnrc_netif_ops_t *ops);
 
 /**
  * @brief   Get number of network interfaces actually allocated
@@ -262,6 +270,22 @@ gnrc_netif_t *gnrc_netif_create(char *stack, int stacksize, char priority,
  * @return  Number of network interfaces actually allocated
  */
 unsigned gnrc_netif_numof(void);
+
+/**
+ * @brief Check if there can only be one @ref gnrc_netif_t interface.
+ *
+ * > There can only be one!
+ *
+ * This function is used to allow compile time optimizations for
+ * single interface applications
+ *
+ * @return true, if there can only only one interface
+ * @return false, if there can be more than one interface
+ */
+static inline bool gnrc_netif_highlander(void)
+{
+    return IS_ACTIVE(GNRC_NETIF_SINGLE);
+}
 
 /**
  * @brief   Iterate over all network interfaces.
@@ -516,6 +540,20 @@ char *gnrc_netif_addr_to_str(const uint8_t *addr, size_t addr_len, char *out);
  * @return  0, on failure.
  */
 size_t gnrc_netif_addr_from_str(const char *str, uint8_t *out);
+
+/**
+ * @brief   Send a GNRC packet via a given @ref gnrc_netif_t interface.
+ *
+ * @param netif         pointer to the interface
+ * @param pkt           packet to be sent.
+ *
+ * @return              1 if packet was successfully delivered
+ * @return              -1 on error
+ */
+static inline int gnrc_netif_send(gnrc_netif_t *netif, gnrc_pktsnip_t *pkt)
+{
+    return gnrc_netapi_send(netif->pid, pkt);
+}
 
 #ifdef __cplusplus
 }

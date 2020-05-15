@@ -1,6 +1,6 @@
 PROGRAMMER ?= openocd
 
-PROGRAMMERS_SUPPORTED := bmp dfu-util openocd
+PROGRAMMERS_SUPPORTED := bmp dfu-util openocd stm32flash
 
 ifeq (,$(filter $(PROGRAMMER), $(PROGRAMMERS_SUPPORTED)))
   $(error Programmer $(PROGRAMMER) not supported)
@@ -46,13 +46,15 @@ ifeq (dfu-util,$(PROGRAMMER))
   ifeq (,$(DFU_USB_ID))
     $(error DFU_USB_ID is not set)
   endif
-  # Skip the space needed by the embedded bootloader
-  ROM_OFFSET ?= 0x2000
-  FLASHER = dfu-util
-  DEBUGGER = # no debugger
-  RESET ?= # dfu-util has no support for resetting the device
+  include $(RIOTMAKE)/tools/dfu.inc.mk
+endif
 
-  FLASHFILE ?= $(BINFILE)
-  DFU_FLAGS ?= -a 2
-  FFLAGS = -d $(DFU_USB_ID) $(DFU_FLAGS) -D $(FLASHFILE)
+ifeq (stm32flash,$(PROGRAMMER))
+	ROM_OFFSET ?= 0x0
+	FLASHER = stm32flash
+	DEBUGGER =
+	FLASHFILE ?= $(BINFILE)
+	PROG_BAUD ?= 57600
+	BIN_ADDR ?= $(shell echo  $$(($(ROM_START_ADDR) + $(ROM_OFFSET))))
+	FFLAGS = -v -b $(PROG_BAUD) -w $(FLASHFILE) -S $(BIN_ADDR) -g $(BIN_ADDR) $(PORT)
 endif

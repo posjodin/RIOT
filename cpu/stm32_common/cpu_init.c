@@ -37,6 +37,7 @@
 #include "stmclk.h"
 #include "periph_cpu.h"
 #include "periph/init.h"
+#include "board.h"
 
 #if defined (CPU_FAM_STM32L4)
 #define BIT_APB_PWREN       RCC_APB1ENR1_PWREN
@@ -148,7 +149,9 @@ void cpu_init(void)
     /* initialize the Cortex-M core */
     cortexm_init();
     /* enable PWR module */
+#ifndef CPU_FAM_STM32WB
     periph_clk_en(APB1, BIT_APB_PWREN);
+#endif
     /* initialize the system clock as configured in the periph_conf.h */
     stmclk_init_sysclk();
 #if defined(CPU_FAM_STM32F0) || defined(CPU_FAM_STM32F1) || \
@@ -163,6 +166,12 @@ void cpu_init(void)
 #endif
     /* initialize stdio prior to periph_init() to allow use of DEBUG() there */
     stdio_init();
+
+#ifdef STM32F1_DISABLE_JTAG
+    RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
+    AFIO->MAPR |= AFIO_MAPR_SWJ_CFG_JTAGDISABLE;
+#endif
+
     /* trigger static peripheral initialization */
     periph_init();
 }

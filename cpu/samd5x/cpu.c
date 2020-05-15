@@ -64,9 +64,14 @@ static void dfll_init(void)
 #endif
     ;
 
-    OSCCTRL->DFLLCTRLB.reg = reg;
-    OSCCTRL->DFLLCTRLA.reg = OSCCTRL_DFLLCTRLA_ENABLE;
+    /* workaround for Errata 2.8.3 DFLLVAL.FINE Value When DFLL48M Re-enabled */
+    OSCCTRL->DFLLMUL.reg   = 0;   /* Write new DFLLMULL configuration */
+    OSCCTRL->DFLLCTRLB.reg = 0;   /* Select Open loop configuration */
+    OSCCTRL->DFLLCTRLA.bit.ENABLE = 1; /* Enable DFLL */
+    OSCCTRL->DFLLVAL.reg   = OSCCTRL->DFLLVAL.reg; /* Reload DFLLVAL register */
+    OSCCTRL->DFLLCTRLB.reg = reg; /* Write final DFLL configuration */
 
+    OSCCTRL->DFLLCTRLA.reg = OSCCTRL_DFLLCTRLA_ENABLE;
     while (!OSCCTRL->STATUS.bit.DFLLRDY) {}
 }
 
@@ -144,11 +149,35 @@ uint32_t sam0_gclk_freq(uint8_t id)
     }
 }
 
+void cpu_pm_cb_enter(int deep)
+{
+    (void) deep;
+    /* will be called before entering sleep */
+}
+
+void cpu_pm_cb_leave(int deep)
+{
+    /* will be called after wake-up */
+
+    if (deep) {
+        /* DFLL needs to be re-initialized to work around errata 2.8.3 */
+        dfll_init();
+    }
+}
+
 /**
  * @brief Initialize the CPU, set IRQ priorities, clocks
  */
 void cpu_init(void)
 {
+    /* Disable the RTC module to prevent synchronization issues during CPU init
+       if the RTC was running from a previous boot (e.g wakeup from backup) */
+    if (RTC->MODE2.CTRLA.bit.ENABLE) {
+        while (RTC->MODE2.SYNCBUSY.reg) {}
+        RTC->MODE2.CTRLA.bit.ENABLE = 0;
+        while (RTC->MODE2.SYNCBUSY.reg) {}
+    }
+
     /* initialize the Cortex-M core */
     cortexm_init();
 
@@ -206,6 +235,5 @@ void cpu_init(void)
 
     /* set ONDEMAND bit after all clocks have been configured */
     /* This is to avoid setting the source for the main clock to ONDEMAND before using it. */
-    OSCCTRL->DFLLCTRLA.reg |= OSCCTRL_DFLLCTRLA_ONDEMAND;
     OSCCTRL->Dpll[0].DPLLCTRLA.reg |= OSCCTRL_DPLLCTRLA_ONDEMAND;
 }

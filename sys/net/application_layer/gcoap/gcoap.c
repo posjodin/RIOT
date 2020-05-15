@@ -46,7 +46,7 @@
 
 /* Internal functions */
 static void *_event_loop(void *arg);
-static void _on_sock_evt(sock_udp_t *sock, sock_async_flags_t type);
+static void _on_sock_evt(sock_udp_t *sock, sock_async_flags_t type, void *arg);
 static ssize_t _well_known_core_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len, void *ctx);
 static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
                                                          sock_udp_ep_t *remote);
@@ -121,19 +121,20 @@ static void *_event_loop(void *arg)
     }
 
     event_queue_init(&_queue);
-    sock_udp_event_init(&_sock, &_queue, _on_sock_evt);
+    sock_udp_event_init(&_sock, &_queue, _on_sock_evt, NULL);
     event_loop(&_queue);
 
     return 0;
 }
 
 /* Handles sock events from the event queue. */
-static void _on_sock_evt(sock_udp_t *sock, sock_async_flags_t type)
+static void _on_sock_evt(sock_udp_t *sock, sock_async_flags_t type, void *arg)
 {
     coap_pkt_t pdu;
     sock_udp_ep_t remote;
     gcoap_request_memo_t *memo = NULL;
 
+    (void)arg;
     if (type & SOCK_ASYNC_MSG_RECV) {
         ssize_t res = sock_udp_recv(sock, _listen_buf, sizeof(_listen_buf),
                                     0, &remote);
@@ -378,7 +379,7 @@ static int _find_resource(coap_pkt_t *pdu, const coap_resource_t **resource_ptr,
     /* Find path for CoAP msg among listener resources and execute callback. */
     gcoap_listener_t *listener = _coap_state.listeners;
 
-    uint8_t uri[NANOCOAP_URI_MAX];
+    uint8_t uri[CONFIG_NANOCOAP_URI_MAX];
     if (coap_get_uri_path(pdu, uri) <= 0) {
         return GCOAP_RESOURCE_NO_PATH;
     }
@@ -658,7 +659,7 @@ int gcoap_req_init(coap_pkt_t *pdu, uint8_t *buf, size_t len,
 
     coap_pkt_init(pdu, buf, len - CONFIG_GCOAP_REQ_OPTIONS_BUF, res);
     if (path != NULL) {
-        res = coap_opt_add_string(pdu, COAP_OPT_URI_PATH, path, '/');
+        res = coap_opt_add_uri_path(pdu, path);
     }
     return (res > 0) ? 0 : res;
 }
@@ -961,12 +962,12 @@ ssize_t gcoap_encode_link(const coap_resource_t *resource, char *buf,
 
 int gcoap_add_qstring(coap_pkt_t *pdu, const char *key, const char *val)
 {
-    char qs[NANOCOAP_QS_MAX];
+    char qs[CONFIG_NANOCOAP_QS_MAX];
     size_t len = strlen(key);
     size_t val_len = (val) ? (strlen(val) + 1) : 0;
 
     /* test if the query string fits, account for the zero termination */
-    if ((len + val_len + 1) >= NANOCOAP_QS_MAX) {
+    if ((len + val_len + 1) >= CONFIG_NANOCOAP_QS_MAX) {
         return -1;
     }
 

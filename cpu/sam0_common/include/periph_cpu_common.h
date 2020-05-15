@@ -96,17 +96,6 @@ enum {
  */
 #define GPIO_MODE(pr, ie, pe)   (pr | (ie << 1) | (pe << 2))
 
-/**
- * @name    Power mode configuration
- * @{
- */
-#ifdef CPU_SAML1X
-#define PM_NUM_MODES        (2)
-#else
-#define PM_NUM_MODES        (3)
-#endif
-/** @} */
-
 #ifndef DOXYGEN
 /**
  * @brief   Override GPIO modes
@@ -212,7 +201,7 @@ typedef struct {
     SercomUsart *dev;       /**< pointer to the used UART device */
     gpio_t rx_pin;          /**< pin used for RX */
     gpio_t tx_pin;          /**< pin used for TX */
-#ifdef MODULE_SAM0_PERIPH_UART_HW_FC
+#ifdef MODULE_PERIPH_UART_HW_FC
     gpio_t rts_pin;          /**< pin used for RTS */
     gpio_t cts_pin;          /**< pin used for CTS */
 #endif
@@ -368,6 +357,20 @@ void gpio_pm_cb_enter(int deep);
 void gpio_pm_cb_leave(int deep);
 
 /**
+ * @brief   Called before the power management enters a power mode
+ *
+ * @param[in] deep
+ */
+void cpu_pm_cb_enter(int deep);
+
+/**
+ * @brief   Called after the power management left a power mode
+ *
+ * @param[in] deep
+ */
+void cpu_pm_cb_leave(int deep);
+
+/**
  * @brief   Wrapper for cortexm_sleep calling power management callbacks
  *
  * @param[in] deep
@@ -378,10 +381,54 @@ static inline void sam0_cortexm_sleep(int deep)
     gpio_pm_cb_enter(deep);
 #endif
 
+    cpu_pm_cb_enter(deep);
+
     cortexm_sleep(deep);
+
+    cpu_pm_cb_leave(deep);
 
 #ifdef MODULE_PERIPH_GPIO
     gpio_pm_cb_leave(deep);
+#endif
+}
+
+/**
+ * @brief   Disable alternate function (PMUX setting) for a PORT pin
+ *
+ * @param[in] pin   Pin to reset the multiplexing for
+ */
+void gpio_disable_mux(gpio_t pin);
+
+/**
+ * @brief   Available voltage regulators on the supply controller.
+ */
+typedef enum {
+    SAM0_VREG_LDO,  /*< LDO, always available but not very power efficient */
+    SAM0_VREG_BUCK  /*< Buck converter, efficient but may clash with internal
+                        fast clock generators (see errata sheets) */
+} sam0_supc_t;
+
+/**
+ * @brief       Switch the internal voltage regulator used for generating the
+ *              internal MCU voltages.
+ *              Available options are:
+ *
+ *               - LDO: not very efficient, but will always work
+ *               - BUCK converter: Most efficient, but incompatible with the
+ *                 use of DFLL or DPLL.
+ *                 Please refer to the errata sheet, further restrictions may
+ *                 apply depending on the MCU.
+ *
+ * @param[in]   src
+ */
+static inline void sam0_set_voltage_regulator(sam0_supc_t src)
+{
+#ifdef REG_SUPC_VREG
+    SUPC->VREG.bit.SEL = src;
+    while (!SUPC->STATUS.bit.VREGRDY) {}
+#else
+    (void) src;
+    assert(0);
 #endif
 }
 

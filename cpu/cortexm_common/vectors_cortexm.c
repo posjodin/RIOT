@@ -17,6 +17,7 @@
  * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
  * @author      Daniel Krebs <github@daniel-krebs.net>
  * @author      Joakim Gebart <joakim.gebart@eistec.se>
+ * @author      Sören Tempel <tempel@uni-bremen.de>
  *
  * @}
  */
@@ -139,11 +140,28 @@ void reset_handler_default(void)
     }
 #endif /* CPU_HAS_BACKUP_RAM */
 
-#ifdef MODULE_MPU_STACK_GUARD
+#if defined(MODULE_MPU_STACK_GUARD) || defined(MODULE_MPU_NOEXEC_RAM)
     mpu_enable();
+#endif
+
+#ifdef MODULE_MPU_NOEXEC_RAM
+    /* Mark the RAM non executable. This is a protection mechanism which
+     * makes exploitation of buffer overflows significantly harder.
+     *
+     * This marks the memory region from 0x20000000 to 0x3FFFFFFF as non
+     * executable. This is the Cortex-M SRAM region used for on-chip RAM.
+     */
+    mpu_configure(
+        0,                                               /* Region 0 (lowest priority) */
+        (uintptr_t)&_sram,                               /* RAM base address */
+        MPU_ATTR(1, AP_RW_RW, 0, 1, 0, 1, MPU_SIZE_512M) /* Allow read/write but no exec */
+    );
+#endif
+
+#ifdef MODULE_MPU_STACK_GUARD
     if (((uintptr_t)&_sstack) != SRAM_BASE) {
         mpu_configure(
-            0,                                              /* MPU region 0 */
+            1,                                              /* MPU region 1 */
             (uintptr_t)&_sstack + 31,                       /* Base Address (rounded up) */
             MPU_ATTR(1, AP_RO_RO, 0, 1, 0, 1, MPU_SIZE_32B) /* Attributes and Size */
         );
@@ -437,7 +455,9 @@ __attribute__((weak,alias("dummy_handler_default"))) void isr_svc(void);
 __attribute__((weak,alias("dummy_handler_default"))) void isr_pendsv(void);
 __attribute__((weak,alias("dummy_handler_default"))) void isr_systick(void);
 
-/* define Cortex-M base interrupt vectors */
+/* define Cortex-M base interrupt vectors
+ * IRQ entries -9 to -6 inclusive (offsets 0x1c to 0x2c of cortexm_base_t)
+ * are reserved entries. */
 ISR_VECTOR(0) const cortexm_base_t cortex_vector_base = {
     &_estack,
     {
@@ -453,6 +473,20 @@ ISR_VECTOR(0) const cortexm_base_t cortex_vector_base = {
         [13] = isr_pendsv,
         /* [-1] SysTick interrupt, not used in RIOT */
         [14] = isr_systick,
+
+        /* -9 to -6 reserved entries can be defined by the cpu module */
+        #ifdef CORTEXM_VECTOR_RESERVED_0X1C
+        [6] = (isr_t)(CORTEXM_VECTOR_RESERVED_0X1C),
+        #endif  /* CORTEXM_VECTOR_RESERVED_0X1C */
+        #ifdef CORTEXM_VECTOR_RESERVED_0X20
+        [7] = (isr_t)(CORTEXM_VECTOR_RESERVED_0X20),
+        #endif  /* CORTEXM_VECTOR_RESERVED_0X20 */
+        #ifdef CORTEXM_VECTOR_RESERVED_0X24
+        [8] = (isr_t)(CORTEXM_VECTOR_RESERVED_0X24),
+        #endif  /* CORTEXM_VECTOR_RESERVED_0X24 */
+        #ifdef CORTEXM_VECTOR_RESERVED_0X28
+        [9] = (isr_t)(CORTEXM_VECTOR_RESERVED_0X28),
+        #endif  /* CORTEXM_VECTOR_RESERVED_0X28 */
 
         /* additional vectors used by M3, M4(F), and M7 */
 #if defined(CPU_ARCH_CORTEX_M3) || defined(CPU_ARCH_CORTEX_M4) || \
