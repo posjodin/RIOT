@@ -24,8 +24,6 @@
 
 #ifndef DOXYGEN
 
-#include "board.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -89,7 +87,7 @@ extern "C" {
 #define CONFIG_SYSTEM_EVENT_TASK_STACK_SIZE     2048
 #define CONFIG_NUMBER_OF_UNIVERSAL_MAC_ADDRESS  4
 
-#define CONFIG_NEWLIB_NANO_FORMAT               0
+#define CONFIG_NEWLIB_NANO_FORMAT               1
 #define CONFIG_ESP32_DEEP_SLEEP_WAKEUP_DELAY    2000
 
 /**

@@ -69,14 +69,15 @@ void gnrc_lorawan_mlme_confirm(gnrc_lorawan_t *mac, mlme_confirm_t *confirm)
 
 static inline void _set_be_addr(gnrc_lorawan_t *mac, uint8_t *be_addr)
 {
-    uint32_t tmp = *((uint32_t*) be_addr);
-    tmp = byteorder_swapl(tmp);
+    uint32_t tmp = byteorder_bebuftohl(be_addr);
+    le_uint32_t dev_addr = byteorder_btoll(byteorder_htonl(tmp));
+
     mlme_request_t mlme_request;
     mlme_confirm_t mlme_confirm;
 
     mlme_request.type = MLME_SET;
     mlme_request.mib.type = MIB_DEV_ADDR;
-    mlme_request.mib.dev_addr = &tmp;
+    mlme_request.mib.dev_addr = &dev_addr;
 
     gnrc_lorawan_mlme_request(mac, &mlme_request, &mlme_confirm);
 }
@@ -241,7 +242,7 @@ static int _get(gnrc_netif_t *netif, gnrc_netapi_opt_t *opt)
             assert(opt->data_len >= sizeof(netopt_enable_t));
             *((netopt_enable_t *) opt->data) = netif->lorawan.otaa;
             break;
-        case NETOPT_LINK_CONNECTED:
+        case NETOPT_LINK:
             mlme_request.type = MLME_GET;
             mlme_request.mib.type = MIB_ACTIVATION_METHOD;
             gnrc_lorawan_mlme_request(&netif->lorawan.mac, &mlme_request, &mlme_confirm);
@@ -321,7 +322,7 @@ static int _set(gnrc_netif_t *netif, const gnrc_netapi_opt_t *opt)
             assert(opt->data_len >= LORAMAC_NWKSKEY_LEN);
             memcpy(netif->lorawan.nwkskey, opt->data, LORAMAC_NWKSKEY_LEN);
             break;
-        case NETOPT_LINK_CONNECTED:
+        case NETOPT_LINK:
         {
             netopt_enable_t en = *((netopt_enable_t *) opt->data);
             if (en) {
@@ -335,6 +336,7 @@ static int _set(gnrc_netif_t *netif, const gnrc_netapi_opt_t *opt)
                 }
                 else {
                     mlme_request.type = MLME_SET;
+                    mlme_request.mib.type = MIB_ACTIVATION_METHOD;
                     mlme_request.mib.activation = MLME_ACTIVATION_ABP;
                     gnrc_lorawan_mlme_request(&netif->lorawan.mac, &mlme_request, &mlme_confirm);
                 }

@@ -24,9 +24,12 @@ FEATURES_BLACKLIST += bootloader_nrfutil
 -include $(UNIT_TESTS:%=$(RIOTBASE)/tests/unittests/%/Makefile.include)
 
 DIRS += $(UNIT_TESTS)
-BASELIBS += $(UNIT_TESTS:%=$(BINDIR)/%.a)
+BASELIBS += $(UNIT_TESTS:%=%.module)
 
 INCLUDES += -I$(RIOTBASE)/tests/unittests/common
+
+# some tests need more stack
+CFLAGS += -DTHREAD_STACKSIZE_MAIN=THREAD_STACKSIZE_LARGE
 
 include $(RIOTBASE)/Makefile.include
 

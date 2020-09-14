@@ -410,6 +410,27 @@ typedef struct {
 /** @} */
 
 /**
+ * @name    RTT and RTC configuration
+ * @{
+ */
+
+/**
+ * @brief   RTT frequency definition
+ *
+ * The RTT frequency is always 32.768 kHz even if no external crystal is
+ * connected. In this case the RTT value counted with the internal 150 kHz
+ * RC oscillator is converted to a value for an RTT with 32.768 kHz.
+ */
+#define RTT_FREQUENCY       (32768UL)
+
+/**
+ * @brief   RTT is a 32-bit counter
+ */
+#define RTT_MAX_VALUE       (0xFFFFFFFFUL)
+
+/** @} */
+
+/**
  * @name   SPI configuration
  *
  * ESP32 has four SPI controllers:
@@ -485,12 +506,12 @@ typedef struct {
  */
 #ifdef MODULE_ESP_HW_COUNTER
 /** hardware ccount/ccompare registers are used for timer implementation */
-#define TIMER_NUMOF     (2)
-#define TIMER_CHANNELS  (1)
+#define TIMER_NUMOF         (2)
+#define TIMER_CHANNEL_NUMOF (1)
 #else
 /** hardware timer modules are used for timer implementation (default) */
-#define TIMER_NUMOF     (3)
-#define TIMER_CHANNELS  (1)
+#define TIMER_NUMOF         (3)
+#define TIMER_CHANNEL_NUMOF (1)
 #endif
 
 /** Timer used for system time */

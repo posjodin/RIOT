@@ -24,6 +24,7 @@
 
 #include "xtimer.h"
 #include "mutex.h"
+#include "rmutex.h"
 #include "thread.h"
 #include "irq.h"
 #include "div.h"
@@ -165,7 +166,7 @@ int _xtimer_msg_receive_timeout64(msg_t *m, uint64_t timeout_ticks) {
     msg_t tmsg;
     xtimer_t t;
     _setup_timer_msg(&tmsg, &t);
-    _xtimer_set_msg64(&t, timeout_ticks, &tmsg, sched_active_pid);
+    _xtimer_set_msg64(&t, timeout_ticks, &tmsg, thread_getpid());
     return _msg_wait(m, &tmsg, &t);
 }
 
@@ -174,7 +175,7 @@ int _xtimer_msg_receive_timeout(msg_t *msg, uint32_t timeout_ticks)
     msg_t tmsg;
     xtimer_t t;
     _setup_timer_msg(&tmsg, &t);
-    _xtimer_set_msg(&t, timeout_ticks, &tmsg, sched_active_pid);
+    _xtimer_set_msg(&t, timeout_ticks, &tmsg, thread_getpid());
     return _msg_wait(msg, &tmsg, &t);
 }
 #endif /* MODULE_CORE_MSG */
@@ -246,7 +247,7 @@ static void _mutex_timeout(void *arg)
      */
     unsigned int irqstate = irq_disable();
 
-    mutex_thread_t *mt = (mutex_thread_t *)arg;
+    mutex_thread_t *mt = arg;
     mt->blocking = 0;
     _mutex_remove_thread_from_waiting_queue(mt->mutex, mt->thread, &mt->dequeued);
     irq_restore(irqstate);
@@ -255,11 +256,13 @@ static void _mutex_timeout(void *arg)
 int xtimer_mutex_lock_timeout(mutex_t *mutex, uint64_t timeout)
 {
     xtimer_t t;
-    mutex_thread_t mt = { mutex, (thread_t *)sched_active_thread, .dequeued=0, .blocking=1 };
+    mutex_thread_t mt = {
+        mutex, thread_get_active(), .dequeued = 0, .blocking = 1
+    };
 
     if (timeout != 0) {
         t.callback = _mutex_timeout;
-        t.arg = (void *)((mutex_thread_t *)&mt);
+        t.arg = &mt;
         xtimer_set64(&t, timeout);
     }
     int ret = _mutex_lock(mutex, &mt.blocking);
@@ -268,6 +271,20 @@ int xtimer_mutex_lock_timeout(mutex_t *mutex, uint64_t timeout)
     }
     xtimer_remove(&t);
     return -mt.dequeued;
+}
+
+int xtimer_rmutex_lock_timeout(rmutex_t *rmutex, uint64_t timeout)
+{
+    if (rmutex_trylock(rmutex)) {
+        return 0;
+    }
+    if (xtimer_mutex_lock_timeout(&rmutex->mutex, timeout) == 0) {
+        atomic_store_explicit(&rmutex->owner,
+                              thread_getpid(), memory_order_relaxed);
+        rmutex->refcount++;
+        return 0;
+    }
+    return -1;
 }
 
 #ifdef MODULE_CORE_THREAD_FLAGS
@@ -279,7 +296,7 @@ static void _set_timeout_flag_callback(void* arg)
 static void _set_timeout_flag_prepare(xtimer_t *t)
 {
     t->callback = _set_timeout_flag_callback;
-    t->arg = (thread_t *)sched_active_thread;
+    t->arg = thread_get_active();
     thread_flags_clear(THREAD_FLAG_TIMEOUT);
 }
 
@@ -295,3 +312,26 @@ void xtimer_set_timeout_flag64(xtimer_t *t, uint64_t timeout)
     xtimer_set64(t, timeout);
 }
 #endif
+
+uint64_t xtimer_left_usec(const xtimer_t *timer)
+{
+    unsigned state = irq_disable();
+    /* ensure we're working on valid data by making a local copy of timer */
+    xtimer_t t = *timer;
+    uint64_t now_us = xtimer_now_usec64();
+    irq_restore(state);
+
+    uint64_t start_us = _xtimer_usec_from_ticks64(
+        ((uint64_t)t.long_start_time << 32) | t.start_time);
+    uint64_t target_us = start_us + _xtimer_usec_from_ticks64(
+        ((uint64_t)t.long_offset) << 32 | t.offset);
+
+    /* Let's assume that 64bit won't overflow anytime soon. There'd be >580
+     * years when counting nanoseconds. With microseconds, there are 580000
+     * years of space in 2**64... */
+    if (now_us > target_us) {
+        return 0;
+    }
+
+    return target_us - now_us;
+}

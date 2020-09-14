@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Freie Universität Berlin
+ * Copyright (C) 2017-20 Freie Universität Berlin
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -13,6 +13,11 @@
  *
  * Network interfaces in the context of GNRC are threads for protocols that are
  * below the network layer.
+ *
+ * ## Single interface optimizations
+ *
+ * If you only have one network interface on the board, you can select the
+ * `gnrc_netif_single` pseudo-module to enable further optimisations.
  *
  * @{
  *
@@ -30,25 +35,32 @@
 
 #include "kernel_types.h"
 #include "msg.h"
+#ifdef MODULE_GNRC_NETIF_BUS
+#include "msg_bus.h"
+#endif
+#include "event.h"
 #include "net/ipv6/addr.h"
 #include "net/gnrc/netapi.h"
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/netif/conf.h"
-#ifdef MODULE_GNRC_LORAWAN
+#if IS_USED(MODULE_GNRC_NETIF_LORAWAN)
 #include "net/gnrc/netif/lorawan.h"
 #endif
-#ifdef MODULE_GNRC_SIXLOWPAN
+#if IS_USED(MODULE_GNRC_NETIF_6LO)
 #include "net/gnrc/netif/6lo.h"
 #endif
 #if defined(MODULE_GNRC_NETIF_DEDUP) && (GNRC_NETIF_L2ADDR_MAXLEN > 0)
 #include "net/gnrc/netif/dedup.h"
 #endif
 #include "net/gnrc/netif/flags.h"
-#ifdef MODULE_GNRC_IPV6
+#if IS_USED(MODULE_GNRC_NETIF_IPV6)
 #include "net/gnrc/netif/ipv6.h"
 #endif
-#ifdef MODULE_GNRC_MAC
+#if IS_USED(MODULE_GNRC_NETIF_MAC)
 #include "net/gnrc/netif/mac.h"
+#endif
+#if IS_USED(MODULE_GNRC_NETIF_PKTQ)
+#include "net/gnrc/netif/pktq/type.h"
 #endif
 #include "net/ndp.h"
 #include "net/netdev.h"
@@ -62,6 +74,35 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief   Per-Interface Event Message Busses
+ */
+typedef enum {
+#ifdef MODULE_GNRC_IPV6
+    GNRC_NETIF_BUS_IPV6,                    /**< provides @ref gnrc_ipv6_event_t
+                                                 messages to subscribers */
+#endif
+    GNRC_NETIF_BUS_NUMOF
+} gnrc_netif_bus_t;
+
+/**
+ * @brief   Event types for GNRC_NETIF_BUS_IPV6 per-interface message bus
+ */
+typedef enum {
+    /**
+     * @brief   Address becomes valid
+     *
+     * The event is generated when an address on the interface becomes valid.
+     * The message payload contains a pointer to the respective
+     * @ref ipv6_addr_t struct.
+     *
+     * @note If the address on the interface changed between sending
+     * the event and processing it, the pointer will point to the new address
+     * which might *not* be valid.
+     */
+    GNRC_IPV6_EVENT_ADDR_VALID,
+} gnrc_ipv6_event_t;
 
 /**
  * @brief   Operations to an interface
@@ -79,21 +120,34 @@ typedef struct {
 #ifdef MODULE_NETSTATS_L2
     netstats_t stats;                       /**< transceiver's statistics */
 #endif
-#if defined(MODULE_GNRC_LORAWAN) || DOXYGEN
+#if IS_USED(MODULE_GNRC_NETIF_LORAWAN) || defined(DOXYGEN)
     gnrc_netif_lorawan_t lorawan;           /**< LoRaWAN component */
 #endif
-#if defined(MODULE_GNRC_IPV6) || DOXYGEN
+#if IS_USED(MODULE_GNRC_NETIF_IPV6) || defined(DOXYGEN)
     gnrc_netif_ipv6_t ipv6;                 /**< IPv6 component */
 #endif
-#if defined(MODULE_GNRC_MAC) || DOXYGEN
-    gnrc_netif_mac_t mac;                  /**< @ref net_gnrc_mac component */
-#endif  /* MODULE_GNRC_MAC */
+#if IS_USED(MODULE_GNRC_NETIF_MAC) || defined(DOXYGEN)
+    gnrc_netif_mac_t mac;                   /**< @ref net_gnrc_mac component */
+#endif  /* IS_USED(MODULE_GNRC_NETIF_MAC) || defined(DOXYGEN) */
+#if IS_USED(MODULE_GNRC_NETIF_BUS) || DOXYGEN
+    msg_bus_t bus[GNRC_NETIF_BUS_NUMOF];    /**< Event Message Bus */
+#endif
     /**
      * @brief   Flags for the interface
      *
      * @see net_gnrc_netif_flags
      */
     uint32_t flags;
+#if IS_USED(MODULE_GNRC_NETIF_EVENTS) || defined(DOXYGEN)
+    /**
+     * @brief   Event queue for asynchronous events
+     */
+    event_queue_t evq;
+    /**
+     * @brief   ISR event for the network device
+     */
+    event_t event_isr;
+#endif /* MODULE_GNRC_NETIF_EVENTS */
 #if (GNRC_NETIF_L2ADDR_MAXLEN > 0) || DOXYGEN
     /**
      * @brief   The link-layer address currently used as the source address
@@ -118,8 +172,16 @@ typedef struct {
     gnrc_netif_dedup_t last_pkt;
 #endif
 #endif
-#if defined(MODULE_GNRC_SIXLOWPAN) || DOXYGEN
+#if IS_USED(MODULE_GNRC_NETIF_6LO) || defined(DOXYGEN)
     gnrc_netif_6lo_t sixlo;                 /**< 6Lo component */
+#endif
+#if IS_USED(MODULE_GNRC_NETIF_PKTQ) || defined(DOXYGEN)
+    /**
+     * @brief   Packet queue for sending
+     *
+     * @note    Only available with @ref net_gnrc_netif_pktq.
+     */
+    gnrc_netif_pktq_t send_queue;
 #endif
     uint8_t cur_hl;                         /**< Current hop-limit for out-going packets */
     uint8_t device_type;                    /**< Device type */
@@ -284,7 +346,7 @@ unsigned gnrc_netif_numof(void);
  */
 static inline bool gnrc_netif_highlander(void)
 {
-    return IS_ACTIVE(GNRC_NETIF_SINGLE);
+    return IS_USED(MODULE_GNRC_NETIF_SINGLE);
 }
 
 /**
@@ -506,6 +568,8 @@ int gnrc_netif_set_from_netdev(gnrc_netif_t *netif,
 /**
  * @brief   Converts a hardware address to a human readable string.
  *
+ * @note    Compatibility wrapper for @see netif_addr_to_str
+ *
  * @details The format will be like `xx:xx:xx:xx` where `xx` are the bytes
  *          of @p addr in hexadecimal representation.
  *
@@ -519,11 +583,16 @@ int gnrc_netif_set_from_netdev(gnrc_netif_t *netif,
  *
  * @return  @p out.
  */
-char *gnrc_netif_addr_to_str(const uint8_t *addr, size_t addr_len, char *out);
+static inline char *gnrc_netif_addr_to_str(const uint8_t *addr, size_t addr_len, char *out)
+{
+    return netif_addr_to_str(addr, addr_len, out);
+}
 
 /**
  * @brief   Parses a string of colon-separated hexadecimals to a hardware
  *          address.
+ *
+ * @note    Compatibility wrapper for @see netif_addr_from_str
  *
  * @details The input format must be like `xx:xx:xx:xx` where `xx` will be the
  *          bytes of @p addr in hexadecimal representation.
@@ -539,7 +608,10 @@ char *gnrc_netif_addr_to_str(const uint8_t *addr, size_t addr_len, char *out);
  * @return  Actual length of @p out on success.
  * @return  0, on failure.
  */
-size_t gnrc_netif_addr_from_str(const char *str, uint8_t *out);
+static inline size_t gnrc_netif_addr_from_str(const char *str, uint8_t *out)
+{
+    return netif_addr_from_str(str, out);
+}
 
 /**
  * @brief   Send a GNRC packet via a given @ref gnrc_netif_t interface.
@@ -554,6 +626,23 @@ static inline int gnrc_netif_send(gnrc_netif_t *netif, gnrc_pktsnip_t *pkt)
 {
     return gnrc_netapi_send(netif->pid, pkt);
 }
+
+#if defined(MODULE_GNRC_NETIF_BUS) || DOXYGEN
+/**
+ * @brief   Get a message bus of a given @ref gnrc_netif_t interface.
+ *
+ * @param netif         pointer to the interface
+ * @param type          GNRC message bus [type](@ref gnrc_netif_bus_t)
+ *
+ * @return              the message bus for the interface
+ */
+static inline msg_bus_t* gnrc_netif_get_bus(gnrc_netif_t *netif,
+                                            gnrc_netif_bus_t type)
+{
+    assert(type < GNRC_NETIF_BUS_NUMOF);
+    return &netif->bus[type];
+}
+#endif /* MODULE_GNRC_NETIF_BUS */
 
 #ifdef __cplusplus
 }

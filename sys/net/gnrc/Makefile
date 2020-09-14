@@ -19,6 +19,9 @@ endif
 ifneq (,$(filter gnrc_ipv6_ext_frag,$(USEMODULE)))
   DIRS += network_layer/ipv6/ext/frag
 endif
+ifneq (,$(filter gnrc_ipv6_ext_opt,$(USEMODULE)))
+  DIRS += network_layer/ipv6/ext/opt
+endif
 ifneq (,$(filter gnrc_ipv6_ext_rh,$(USEMODULE)))
   DIRS += network_layer/ipv6/ext/rh
 endif
@@ -45,9 +48,6 @@ ifneq (,$(filter gnrc_netif gnrc_netif_%,$(USEMODULE)))
 endif
 ifneq (,$(filter gnrc_netreg,$(USEMODULE)))
   DIRS += netreg
-endif
-ifneq (,$(filter gnrc_nettest,$(USEMODULE)))
-  DIRS += nettest
 endif
 ifneq (,$(filter gnrc_mac,$(USEMODULE)))
   DIRS += link_layer/mac

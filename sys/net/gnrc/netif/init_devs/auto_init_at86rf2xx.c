@@ -17,8 +17,6 @@
  * @author  Kaspar Schleiser <kaspar@schleiser.de>
  */
 
-#ifdef MODULE_AT86RF2XX
-
 #include "log.h"
 #include "board.h"
 #include "net/gnrc/netif/ieee802154.h"
@@ -53,7 +51,7 @@ void auto_init_at86rf2xx(void)
     for (unsigned i = 0; i < AT86RF2XX_NUM; i++) {
         LOG_DEBUG("[auto_init_netif] initializing at86rf2xx #%u\n", i);
 
-        at86rf2xx_setup(&at86rf2xx_devs[i], &at86rf2xx_params[i]);
+        at86rf2xx_setup(&at86rf2xx_devs[i], &at86rf2xx_params[i], i);
 #if defined(MODULE_GNRC_GOMACH)
         gnrc_netif_gomach_create(&_netif[i], _at86rf2xx_stacks[i],
                                  AT86RF2XX_MAC_STACKSIZE,
@@ -72,8 +70,4 @@ void auto_init_at86rf2xx(void)
 #endif
     }
 }
-#else
-typedef int dont_be_pedantic;
-#endif /* MODULE_AT86RF2XX */
-
 /** @} */

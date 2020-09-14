@@ -29,6 +29,8 @@
 #include "msg.h"
 #include "timex.h"
 
+#include "test_utils/expect.h"
+
 #ifdef MODULE_ZTIMER_MSEC
 #define ZTIMER ZTIMER_MSEC
 #define TICKS_PER_SEC MS_PER_SEC
@@ -69,7 +71,7 @@ void *timer_thread(void *arg)
         msg_receive(&m);
         struct timer_msg *tmsg = m.content.ptr;
         uint32_t now = ztimer_now(ZTIMER);
-        printf("now=%" PRIu32 ":%" PRIu32 " -> every %" PRIu32 ".%" PRIu32 "s: %s\n",
+        printf("now=%lu:%lu -> every %lu.%lus: %s\n",
                (now / TICKS_PER_SEC),
                (now % TICKS_PER_SEC),
                tmsg->interval / TICKS_PER_SEC,
@@ -112,6 +114,8 @@ int main(void)
                   NULL,
                   "timer");
 
+    expect(pid_is_valid(pid));
+
     puts("sending 1st msg");
     m.content.ptr = &msg_a;
     msg_try_send(&m, pid);
@@ -128,6 +132,8 @@ int main(void)
                    timer_thread_local,
                    NULL,
                    "timer local");
+
+    expect(pid_is_valid(pid2));
 
     while (1) {
         ztimer_sleep(ZTIMER, 1 * TICKS_PER_SEC);

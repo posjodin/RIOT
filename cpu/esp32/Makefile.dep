@@ -5,12 +5,8 @@ include $(RIOTCPU)/esp_common/Makefile.dep
 USEMODULE += esp_idf_driver
 USEMODULE += esp_idf_esp32
 USEMODULE += esp_idf_soc
+USEMODULE += newlib_nano
 USEMODULE += pm_layered
-
-ifneq (,$(filter cpp,$(FEATURES_USED)))
-  USEMODULE += pthread
-  USEMODULE += esp_cxx
-endif
 
 ifneq (,$(filter esp_eth,$(USEMODULE)))
   USEMODULE += esp_freertos
@@ -40,7 +36,6 @@ endif
 ifneq (,$(filter esp_idf_nvs_flash,$(USEMODULE)))
   # add additional modules required by esp_idf_nvs_flash
   USEMODULE += mtd
-  USEMODULE += pthread
 endif
 
 ifneq (,$(filter periph_rtc,$(USEMODULE)))
@@ -49,10 +44,6 @@ endif
 
 ifneq (,$(filter esp_rtc_timer_32k,$(FEATURES_USED)))
     USEMODULE += esp_rtc_timer_32k
-endif
-
-ifneq (,$(filter esp_rtc_timer_32k,$(USEMODULE)))
-    USEMODULE += esp_rtc_timer
 endif
 
 ifneq (,$(filter periph_adc periph_dac,$(USEMODULE)))
@@ -91,8 +82,17 @@ ifneq (,$(filter ndn-riot,$(USEPKG)))
   USEMODULE += cipher_modes
 endif
 
+ifneq (,$(filter periph_rtc,$(USEMODULE)))
+  USEMODULE += rtt_rtc
+endif
+
 ifneq (,$(filter pm_layered,$(USEMODULE)))
-  USEMODULE += periph_rtc
+  USEMODULE += periph_rtt
+endif
+
+ifneq (,$(filter periph_rtt,$(USEMODULE)))
+  USEMODULE += periph_rtt_hw_sys
+  USEMODULE += periph_rtt_hw_rtc
 endif
 
 ifneq (,$(filter shell,$(USEMODULE)))

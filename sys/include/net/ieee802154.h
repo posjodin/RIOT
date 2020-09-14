@@ -94,7 +94,61 @@ extern "C" {
 #define IEEE802154_CHANNEL_MAX          (26U)   /**< Maximum channel for 2.4 GHz band */
 /** @} */
 
-#define IEEE802154_FRAME_LEN_MAX        (127U)  /**< maximum frame length */
+#define IEEE802154_FRAME_LEN_MAX        (127U)  /**< maximum 802.15.4 frame length */
+#define IEEE802154G_FRAME_LEN_MAX      (2047U)  /**< maximum 802.15.4g-2012 frame length */
+#define IEEE802154_ACK_FRAME_LEN          (5U)  /**< ACK frame length */
+
+/**
+ * @brief Number of symbols to wait during Long Inter Frame Spacing
+ */
+#define IEEE802154_LIFS_SYMS            (40U)
+
+/**
+ * @brief Number of symbols to wait during Short Inter Frame Spacing
+ */
+#define IEEE802154_SIFS_SYMS            (12U)
+
+/**
+ * @brief Maximum frame size to consider a frame as short.
+ */
+#define IEEE802154_SIFS_MAX_FRAME_SIZE  (18U)
+
+/**
+ * @brief value of measured power when RSSI is zero.
+ *
+ * This value is defined in the IEEE 802.15.4 standard
+ */
+#define IEEE802154_RADIO_RSSI_OFFSET        (-174)
+
+/**
+ * For the SUN PHYs, the value is 1 ms expressed in symbol periods, rounded
+ * up to the next integer number of symbol periods using the ceiling() function.
+ *
+ * 802.15.4g, Table 70 (p. 43)
+ */
+#define IEEE802154G_ATURNAROUNDTIME_US (1 * US_PER_MS)
+
+/**
+ * @brief   802.15.4 PHY modes
+ */
+enum {
+    IEEE802154_PHY_DISABLED,        /**< PHY disabled, no mode selected */
+    IEEE802154_PHY_BPSK,            /**< Binary Phase Shift Keying */
+    IEEE802154_PHY_ASK,             /**< Amplitude-Shift Keying */
+    IEEE802154_PHY_OQPSK,           /**< Offset Quadrature Phase-Shift Keying */
+    IEEE802154_PHY_MR_OQPSK,        /**< Multi-Rate Offset Quadrature Phase-Shift Keying */
+    IEEE802154_PHY_MR_OFDM,         /**< Multi-Rate Orthogonal Frequency-Division Multiplexing */
+    IEEE802154_PHY_MR_FSK           /**< Multi-Rate Frequency Shift Keying */
+};
+
+/**
+ * @brief   802.15.4 forward error correction schemes
+ */
+enum {
+    IEEE802154_FEC_NONE,            /**< no forward error correction */
+    IEEE802154_FEC_NRNSC,           /**< non-recursive and non-systematic code */
+    IEEE802154_FEC_RSC              /**< recursive and systematic code */
+};
 
 /**
  * @brief   Special address definitions
@@ -163,6 +217,27 @@ extern const uint8_t ieee802154_addr_bcast[IEEE802154_ADDR_BCAST_LEN];
 #define CONFIG_IEEE802154_DEFAULT_TXPOWER          (0)
 #endif
 /** @} */
+
+/**
+ * @brief IEEE802.15.4 default value for minimum backoff exponent
+ */
+#ifndef CONFIG_IEEE802154_DEFAULT_CSMA_CA_MIN_BE
+#define CONFIG_IEEE802154_DEFAULT_CSMA_CA_MIN_BE   (3U)
+#endif
+
+/**
+ * @brief IEEE802.15.4 default value for maximum number of CSMA-CA retries.
+ */
+#ifndef CONFIG_IEEE802154_DEFAULT_CSMA_CA_RETRIES
+#define CONFIG_IEEE802154_DEFAULT_CSMA_CA_RETRIES  (4U)
+#endif
+
+/**
+ * @brief IEEE802.15.4 default value for maximum backoff exponent
+ */
+#ifndef CONFIG_IEEE802154_DEFAULT_CSMA_CA_MAX_BE
+#define CONFIG_IEEE802154_DEFAULT_CSMA_CA_MAX_BE   (5U)
+#endif
 
 /**
  * @brief   Initializes an IEEE 802.15.4 MAC frame header in @p buf.

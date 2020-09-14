@@ -32,8 +32,12 @@ extern "C" {
  * @name    Xtimer configuration
  * @{
  */
-#if defined(CPU_FAM_STM32F0) || defined(CPU_FAM_STM32L0) && \
+#if (defined(CPU_FAM_STM32F0) || defined(CPU_FAM_STM32L0)) && \
     !defined(CPU_MODEL_STM32F042K6) && !defined(CPU_MODEL_STM32F031K6)
+#define XTIMER_WIDTH                (16)
+#endif
+
+#if defined(CPU_FAM_STM32G0)
 #define XTIMER_WIDTH                (16)
 #endif
 
@@ -50,6 +54,11 @@ extern "C" {
 #define XTIMER_BACKOFF              (8)
 #endif
 /** @} */
+
+/**
+ * @brief   Common board initialization routine for Nucleo boards
+ */
+void board_common_nucleo_init(void);
 
 /**
  * @brief   Initialize board specific hardware, including clock, LEDs and std-IO

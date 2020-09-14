@@ -1,15 +1,17 @@
 PKG_NAME=wolfssl
 PKG_URL=https://github.com/wolfssl/wolfssl.git
-PKG_VERSION=3f13b49fa318fbd3216d7da36d942e7c276d3413 # v4.3.0
+PKG_VERSION=0fa5af9929ce2ee99e8789996a3048f41a99830e # v4.5.0
 PKG_LICENSE=GPLv2
 
 include $(RIOTBASE)/pkg/pkg.mk
 
-all:  # Nothing to do here when building
+.PHONY: wolfcrypt%
 
-prepare:
-	cp Makefile.wolfssl $(PKG_BUILDDIR)/src/Makefile
-	cp Makefile.wolfcrypt $(PKG_BUILDDIR)/wolfcrypt/src/Makefile
-	touch $(PKG_BUILDDIR)/wolfssl.a
-	cp Makefile.wolfcrypt-test $(PKG_BUILDDIR)/wolfcrypt/test/Makefile
-	cp Makefile.wolfcrypt-benchmark $(PKG_BUILDDIR)/wolfcrypt/benchmark/Makefile
+all: $(filter wolfcrypt wolfcrypt-test wolfcrypt-benchmark,$(USEMODULE))
+	"$(MAKE)" -C $(PKG_SOURCE_DIR)/src -f $(CURDIR)/Makefile.wolfssl
+
+wolfcrypt:
+	"$(MAKE)" -C $(PKG_SOURCE_DIR)/wolfcrypt/src -f $(CURDIR)/Makefile.wolfcrypt
+
+wolfcrypt-%:
+	"$(MAKE)" -C $(PKG_SOURCE_DIR)/wolfcrypt/$* -f $(CURDIR)/Makefile.wolfcrypt-$*

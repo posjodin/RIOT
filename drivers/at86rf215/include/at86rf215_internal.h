@@ -14,7 +14,6 @@
  * @brief       Low-Level functions for the AT86RF215 driver
  *
  * @author      Benjamin Valentin <benjamin.valentin@ml-pa.com>
- * @}
  */
 
 #ifndef AT86RF215_INTERNAL_H
@@ -23,6 +22,7 @@
 #include <stdint.h>
 #include "at86rf215.h"
 #include "at86rf215_registers.h"
+#include "board.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,7 +31,9 @@ extern "C" {
 /**
  * @brief Minimum reset pulse width (tRST) in µs
  */
-#define AT86RF215_RESET_PULSE_WIDTH_US  (16U)
+#ifndef CONFIG_AT86RF215_RESET_PULSE_WIDTH_US
+#define CONFIG_AT86RF215_RESET_PULSE_WIDTH_US  (16U)
+#endif
 
 /**
  * @brief The typical transition time to TRX_OFF after reset (tPOWERON) in µs
@@ -46,8 +48,6 @@ extern "C" {
  */
 /** 20 symbols is the std period length */
 #define AT86RF215_BACKOFF_PERIOD_IN_SYMBOLS (20U)
-/** in 802.15.4 oqpsk each symble is 4 bits, not about the others */
-#define AT86RF215_BACKOFF_PERIOD_IN_BITS    (AT86RF215_BACKOFF_PERIOD_IN_SYMBOLS * 4)
 
 /**
  * Default Parameters for 802.15.4 retransmissions & CSMA
@@ -59,10 +59,6 @@ extern "C" {
 #define AT86RF215_CSMA_MAX_BE_DEFAULT       (5)
 /** @} */
 
-/** For the SUN PHYs, the value is 1 ms expressed in symbol periods, rounded up to the next
-    integer number of symbol periods using the ceiling() function */
-#define AT86RF215_TURNAROUND_TIME_US        (1 * US_PER_MS)
-
 /** An ACK consists of 5 payload bytes */
 #define AT86RF215_ACK_PSDU_BYTES            (5)
 
@@ -71,8 +67,6 @@ extern "C" {
  * AT86RF233 uses an ACK timeout of 54 symbol periods, or 864 µs @ 250 kbit/s
  * -> 864µs * 250kbit/s = 216 bit */
 #define AT86RF215_ACK_PERIOD_IN_SYMBOLS (54U)
-/** in 802.15.4 oqpsk each symble is 4 bits, not about the others */
-#define AT86RF215_ACK_PERIOD_IN_BITS    (AT86RF215_ACK_PERIOD_IN_SYMBOLS * 4)
 
 #define AT86RF215_OQPSK_MODE_LEGACY           (0x1)                             /**< legacy mode, 250 kbit/s */
 #define AT86RF215_OQPSK_MODE_LEGACY_HDR       (0x3)                             /**< legacy mode, high data rate */
@@ -146,6 +140,63 @@ void at86rf215_filter_ack(at86rf215_t *dev, bool on);
 void at86rf215_get_random(at86rf215_t *dev, void *data, size_t len);
 
 /**
+ * @brief   Configure the radio to make use of OFDM modulation.
+ *          There are 4 OFDM options, each with a different number of active tones.
+ *          The device supports BPSK, QPSK and 16-QAM modulation and coding schemes (MCS)
+ *
+ * @param[in] dev       device to configure
+ * @param[in] option    modulation option, each increment halves the data rate
+ * @param[in] mcs       modulation scheme, `BB_MCS_BPSK_REP4` … `BB_MCS_16QAM_3BY4`
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_configure_OFDM(at86rf215_t *dev, uint8_t option, uint8_t mcs);
+
+/**
+ * @brief   Set the current modulation and coding scheme (MCS)
+ *
+ * @param[in] dev       device to configure
+ * @param[in] mcs       modulation and coding scheme
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_OFDM_set_scheme(at86rf215_t *dev, uint8_t mcs);
+
+/**
+ * @brief   Get the current modulation and coding scheme (MCS)
+ *
+ * @param[in] dev       device to read from
+ *
+ * @return              the current modulation & coding scheme
+ */
+uint8_t at86rf215_OFDM_get_scheme(at86rf215_t *dev);
+
+/**
+ * @brief   Set the current OFDM option
+ *
+ * @param[in] dev       device to configure
+ * @param[in] option    OFDM option
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_OFDM_set_option(at86rf215_t *dev, uint8_t option);
+
+/**
+ * @brief   Get the current OFDM option
+ *
+ * @param[in] dev       device to read from
+ *
+ * @return              the current OFDM option
+ */
+uint8_t at86rf215_OFDM_get_option(at86rf215_t *dev);
+
+/**
+ * @ingroup     drivers_at86rf215
+ * @defgroup    drivers_at86rf215_oqpsk     AT86RF215 MR-O-QPSK PHY
+ * @{
+ */
+
+/**
  * @brief   Configure the radio to make use of O-QPSK modulation.
  *          The rate mode may be
  *              - 0 for compatibility with first-gen 802.15.4 devices (250 kbit/s)
@@ -157,6 +208,105 @@ void at86rf215_get_random(at86rf215_t *dev, void *data, size_t len);
  * @return              0 on success, error otherwise
  */
 int at86rf215_configure_legacy_OQPSK(at86rf215_t *dev, bool high_rate);
+
+/**
+ * @brief   Configure the radio to make use of O-QPSK modulation.
+ *          The chip rate is the number of bits per second (chips per second) used in the spreading signal.
+ *          The rate mode may be
+ *              - @ref AT86RF215_OQPSK_MODE_LEGACY for compatibility with first-gen 802.15.4 devices (250 kbit/s)
+ *              - @ref AT86RF215_OQPSK_MODE_LEGACY_HDR for compatibility with the proprietary high-data rate mode
+ *                of the at86rf233 (1000 kbit/s, 2.4 GHz) and at86rf212b (500 kbit/s, sub-GHz)
+ *              - @ref AT86RF215_MR_OQPSK_MODE for the rate modes specified in 802.15.4g-2012
+ *
+ * @param[in] dev       device to configure
+ * @param[in] chips     chip rate, `BB_FCHIP100` … `BB_FCHIP2000`
+ * @param[in] rate      rate mode, may be @ref AT86RF215_OQPSK_MODE_LEGACY or @ref AT86RF215_MR_OQPSK_MODE
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_configure_OQPSK(at86rf215_t *dev, uint8_t chips, uint8_t rate);
+
+/**
+ * @brief   Get the current O-QPSK chip rate
+ *
+ * @param[in] dev       device to read from
+ *
+ * @return              the current chip rate
+ */
+uint8_t at86rf215_OQPSK_get_chips(at86rf215_t *dev);
+
+/**
+ * @brief   Set the current O-QPSK chip rate
+ *
+ * @param[in] dev       device to configure
+ * @param[in] chips     chip rate in chip/s
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_OQPSK_set_chips(at86rf215_t *dev, uint8_t chips);
+
+/**
+ * @brief   Get the current O-QPSK rate mode
+ *
+ * @param[in] dev       device to read from
+ *
+ * @return              the current rate mode
+ */
+uint8_t at86rf215_OQPSK_get_mode(at86rf215_t *dev);
+
+/**
+ * @brief   Set the current O-QPSK rate mode
+ *
+ * @param[in] dev       device to configure
+ * @param[in] mode      rate mode
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_OQPSK_set_mode(at86rf215_t *dev, uint8_t mode);
+
+/**
+ * @brief   Get the current legacy O-QPSK mode
+ *
+ * @param[in] dev       device to read from
+ *
+ * @return              0 for IEEE 802.15.4 mode, 1 for high data rate
+ */
+uint8_t at86rf215_OQPSK_get_mode_legacy(at86rf215_t *dev);
+
+/**
+ * @brief   Set the current legacy O-QPSK rate mode
+ *
+ * @param[in] dev       device to configure
+ * @param[in] high_rate set to use proprietary high data rate
+ *
+ * @return              0 on success, error otherwise
+ */
+int at86rf215_OQPSK_set_mode_legacy(at86rf215_t *dev, bool high_rate);
+
+/**
+ * @brief   Test if O-QPSK PHY operates in legacy mode
+ *
+ * @param[in] dev       device to test
+ *
+ * @return              true if device operates in legacy mode
+ */
+static inline bool at86rf215_OQPSK_is_legacy(at86rf215_t *dev) {
+    return at86rf215_reg_read(dev, dev->BBC->RG_OQPSKPHRTX) & AT86RF215_OQPSK_MODE_LEGACY;
+}
+
+/** @} */
+
+/**
+ * @brief   Get the current PHY modulation.
+ *          May be @ref IEEE802154_PHY_MR_FSK, @ref IEEE802154_PHY_MR_OFDM,
+ *          @ref IEEE802154_PHY_MR_OQPSK, @ref IEEE802154_PHY_OQPSK
+ *          or @ref IEEE802154_PHY_DISABLED.
+ *
+ * @param[in] dev       device to read from
+ *
+ * @return              the current PHY mode the device is operating with
+ */
+uint8_t at86rf215_get_phy_mode(at86rf215_t *dev);
 
 /**
  * @brief   Check if a channel number is valid.
@@ -363,15 +513,6 @@ void at86rf215_disable_rpc(at86rf215_t *dev);
  * @param[in] dev           device to configure
  */
 void at86rf215_enable_rpc(at86rf215_t *dev);
-
-/**
- * @brief Notify the driver and stack about a change in transmission mode
- *        which may result in a change of PDU.
- *
- * @param[in] dev           device that changed it's mode
- * @param[in] new_mode      the new transmission mode
- */
-bool at86rf215_switch_mode(at86rf215_t *dev, uint8_t new_mode);
 
 /**
  * @brief Checks whether the device operates in the sub-GHz band.

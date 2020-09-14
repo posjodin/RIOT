@@ -36,6 +36,10 @@
 #include <auto_init.h>
 #endif
 
+#ifndef CONFIG_BOOT_MSG_STRING
+#define CONFIG_BOOT_MSG_STRING "main(): This is RIOT! (Version: " RIOT_VERSION ")"
+#endif
+
 extern int main(void);
 
 static void *main_trampoline(void *arg)
@@ -46,12 +50,17 @@ static void *main_trampoline(void *arg)
     auto_init();
 #endif
 
-    LOG_INFO("main(): This is RIOT! (Version: " RIOT_VERSION ")\n");
+    if (!IS_ACTIVE(CONFIG_SKIP_BOOT_MSG)) {
+        LOG_INFO(CONFIG_BOOT_MSG_STRING "\n");
+    }
 
     main();
 
     return NULL;
 }
+
+static char main_stack[THREAD_STACKSIZE_MAIN];
+static char idle_stack[THREAD_STACKSIZE_IDLE];
 
 static void *idle_thread(void *arg)
 {
@@ -64,17 +73,17 @@ static void *idle_thread(void *arg)
     return NULL;
 }
 
-static char main_stack[THREAD_STACKSIZE_MAIN];
-static char idle_stack[THREAD_STACKSIZE_IDLE];
 
 void kernel_init(void)
 {
     irq_disable();
 
-    thread_create(idle_stack, sizeof(idle_stack),
-                  THREAD_PRIORITY_IDLE,
-                  THREAD_CREATE_WOUT_YIELD | THREAD_CREATE_STACKTEST,
-                  idle_thread, NULL, "idle");
+    if (IS_USED(MODULE_CORE_IDLE_THREAD)) {
+        thread_create(idle_stack, sizeof(idle_stack),
+                      THREAD_PRIORITY_IDLE,
+                      THREAD_CREATE_WOUT_YIELD | THREAD_CREATE_STACKTEST,
+                      idle_thread, NULL, "idle");
+    }
 
     thread_create(main_stack, sizeof(main_stack),
                   THREAD_PRIORITY_MAIN,

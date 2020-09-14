@@ -57,6 +57,16 @@ typedef struct at86rf215_BBC_regs at86rf215_BBC_regs_t;
 typedef void (*at86rf215_batmon_cb_t)(void *arg);
 
 /**
+ * @brief MR-O-QPSK chip rates (kChip/s)
+ */
+enum {
+    AT86RF215_FCHIP_100,
+    AT86RF215_FCHIP_200,
+    AT86RF215_FCHIP_1000,
+    AT86RF215_FCHIP_2000,
+};
+
+/**
  * @brief   Maximum possible packet size in byte
  */
 #define AT86RF215_MAX_PKT_LENGTH        (2047)
@@ -71,11 +81,11 @@ typedef void (*at86rf215_batmon_cb_t)(void *arg);
  *          as a clock source on the board.
  *          Otherwise it is turned off to save energy.
  */
-#ifndef AT86RF215_USE_CLOCK_OUTPUT
-#define AT86RF215_USE_CLOCK_OUTPUT      (0)
+#ifdef DOXYGEN
+#define CONFIG_AT86RF215_USE_CLOCK_OUTPUT
 #endif
 
-#if defined(DOXYGEN) && !defined(AT86RF215_TRIM_VAL)
+#if defined(DOXYGEN) && !defined(CONFIG_AT86RF215_TRIM_VAL)
 /**
  * @brief   Trim value for the external crystal oscillator.
  *
@@ -84,26 +94,116 @@ typedef void (*at86rf215_batmon_cb_t)(void *arg);
  *
  *          Range: 0..15
  *
- *          Use in conjunction with @see AT86RF215_USE_CLOCK_OUTPUT and a frequency
+ *          Use in conjunction with @see CONFIG_AT86RF215_USE_CLOCK_OUTPUT and a frequency
  *          meter connected to the clock output pin of the AT86RF215.
  *          Tweak the value until the measured clock output matches 26 MHz the best.
  */
-#define AT86RF215_TRIM_VAL              (0)
+#define CONFIG_AT86RF215_TRIM_VAL              (0)
 #endif
-/** @} */
 
 /**
  * @name    Channel configuration
  * @{
  */
-#define AT86RF215_DEFAULT_CHANNEL        (CONFIG_IEEE802154_DEFAULT_CHANNEL)
-#define AT86RF215_DEFAULT_SUBGHZ_CHANNEL (CONFIG_IEEE802154_DEFAULT_SUBGHZ_CHANNEL)
+#ifndef CONFIG_AT86RF215_DEFAULT_CHANNEL
+#define CONFIG_AT86RF215_DEFAULT_CHANNEL        (CONFIG_IEEE802154_DEFAULT_CHANNEL)
+#endif
+
+#ifndef CONFIG_AT86RF215_DEFAULT_SUBGHZ_CHANNEL
+#define CONFIG_AT86RF215_DEFAULT_SUBGHZ_CHANNEL (CONFIG_IEEE802154_DEFAULT_SUBGHZ_CHANNEL)
+#endif
+/** @} */
+
+/**
+ * @name    Enable Reduced Power Consumption
+ * @{
+ */
+#ifndef CONFIG_AT86RF215_RPC_EN
+#define CONFIG_AT86RF215_RPC_EN                 (0)
+#endif
+/** @} */
+
+/**
+ * @name    Default PHY Mode
+ * @{
+ */
+#if IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_LEGACY_OQPSK)
+#define CONFIG_AT86RF215_DEFAULT_PHY_MODE   (IEEE802154_PHY_OQPSK)
+#elif IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_MR_OQPSK)
+#define CONFIG_AT86RF215_DEFAULT_PHY_MODE   (IEEE802154_PHY_MR_OQPSK)
+#elif IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_MR_OFDM)
+#define CONFIG_AT86RF215_DEFAULT_PHY_MODE   (IEEE802154_PHY_MR_OFDM)
+#endif
+
+#ifndef CONFIG_AT86RF215_DEFAULT_PHY_MODE
+#define CONFIG_AT86RF215_DEFAULT_PHY_MODE   (IEEE802154_PHY_OQPSK)
+#endif
+/** @} */
+
+/**
+ * @name    Default O-QPSK Rate Mode
+ *          Non-zero value enables proprietary high data rate by default
+ * @{
+ */
+#ifndef CONFIG_AT86RF215_DEFAULT_OQPSK_RATE
+#define CONFIG_AT86RF215_DEFAULT_OQPSK_RATE     (0)
+#endif
+/** @} */
+
+/**
+ * @name    Default MR-O-QPSK Chip Rate
+ * @{
+ */
+#if IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS_100)
+#define CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS (AT86RF215_FCHIP_100)
+#elif IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS_200)
+#define CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS (AT86RF215_FCHIP_200)
+#elif IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS_1000)
+#define CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS (AT86RF215_FCHIP_1000)
+#elif IS_ACTIVE(CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS_2000)
+#define CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS (AT86RF215_FCHIP_2000)
+#endif
+
+#ifndef CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS
+#define CONFIG_AT86RF215_DEFAULT_MR_OQPSK_CHIPS (AT86RF215_FCHIP_1000)
+#endif
+/** @} */
+
+/**
+ * @name    Default MR-O-QPSK Rate Mode
+ * @{
+ */
+#ifndef CONFIG_AT86RF215_DEFAULT_MR_OQPSK_RATE
+#define CONFIG_AT86RF215_DEFAULT_MR_OQPSK_RATE  (2)
+#endif
+/** @} */
+
+/**
+ * @name    Default MR-OFDM Option
+ * @{
+ */
+#ifndef CONFIG_AT86RF215_DEFAULT_MR_OFDM_OPT
+#define CONFIG_AT86RF215_DEFAULT_MR_OFDM_OPT    (2)
+#endif
+/** @} */
+
+/**
+ * @name    Default MR-OFDM Modulation & Coding Scheme
+ * @{
+ */
+#ifndef CONFIG_AT86RF215_DEFAULT_MR_OFDM_MCS
+#define CONFIG_AT86RF215_DEFAULT_MR_OFDM_MCS    (2)
+#endif
 /** @} */
 
 /**
  * @brief   Default TX power (0dBm)
  */
-#define AT86RF215_DEFAULT_TXPOWER       (CONFIG_IEEE802154_DEFAULT_TXPOWER)
+#ifndef CONFIG_AT86RF215_DEFAULT_TXPOWER
+#define CONFIG_AT86RF215_DEFAULT_TXPOWER       (CONFIG_IEEE802154_DEFAULT_TXPOWER)
+#endif
+
+/** @} */
 
 /**
  * @name    Flags for device internal states (see datasheet)
@@ -118,6 +218,13 @@ typedef enum {
     AT86RF215_STATE_SLEEP       /**< sleep mode, not listening */
 } at86rf215_state_t;
 /** @} */
+
+enum {
+    AT86RF215_MODE_LEGACY_OQPSK,
+    AT86RF215_MODE_MR_OQPSK,
+    AT86RF215_MODE_MR_OFDM,
+    AT86RF215_MODE_MR_FSK
+};
 
 /**
  * @name    Internal device option flags
@@ -194,8 +301,10 @@ typedef struct at86rf215 {
  * @param[out] dev_09       sub-GHz device descriptor
  * @param[out] dev_24       2.4 GHz device descriptor
  * @param[in]  params       parameters for device initialization
+ * @param[in]  index        index of @p params in a global parameter struct array.
+ *                          If initialized manually, pass a unique identifier instead.
  */
-void at86rf215_setup(at86rf215_t *dev_09, at86rf215_t *dev_24, const at86rf215_params_t *params);
+void at86rf215_setup(at86rf215_t *dev_09, at86rf215_t *dev_24, const at86rf215_params_t *params, uint8_t index);
 
 /**
  * @brief   Trigger a hardware reset and configure radio with default values.

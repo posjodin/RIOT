@@ -11,9 +11,10 @@ RESET_FLAGS ?= reset
 
 ifneq (,$(DEBUG_ADAPTER))
   include $(RIOTMAKE)/tools/openocd-adapters/$(DEBUG_ADAPTER).inc.mk
+  OPENOCD_ADAPTER_INIT += -c 'transport select $(OPENOCD_TRANSPORT)'
 endif
 
-OPENOCD_CONFIG ?= $(BOARDSDIR)/$(BOARD)/dist/openocd.cfg
+OPENOCD_CONFIG ?= $(BOARDDIR)/dist/openocd.cfg
 
 # Export OPENOCD_CONFIG to required targets
 OPENOCD_TARGETS = debug% flash% reset

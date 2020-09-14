@@ -19,8 +19,13 @@
 #ifndef PERIPH_CONF_H
 #define PERIPH_CONF_H
 
+/* Add specific clock configuration (HSE, LSE) for this board here */
+#ifndef CONFIG_BOARD_HAS_LSE
+#define CONFIG_BOARD_HAS_LSE            1
+#endif
+
 #include "periph_cpu.h"
-#include "l4/cfg_clock_80_1.h"
+#include "l4/cfg_clock_default.h"
 #include "cfg_rtt_default.h"
 
 #ifdef __cplusplus
@@ -31,7 +36,6 @@ extern "C" {
  * @name    DMA streams configuration
  * @{
  */
-#ifdef MODULE_PERIPH_DMA
 static const dma_conf_t dma_config[] = {
     { .stream = 1 },    /* DMA1 Channel 2 - SPI1_RX */
     { .stream = 2 },    /* DMA1 Channel 3 - SPI1_TX */
@@ -45,7 +49,6 @@ static const dma_conf_t dma_config[] = {
 #define DMA_3_ISR  isr_dma2_channel3
 
 #define DMA_NUMOF           ARRAY_SIZE(dma_config)
-#endif
 /** @} */
 
 /**
@@ -134,28 +137,8 @@ static const pwm_conf_t pwm_config[] = {
 
 /**
  * @name    SPI configuration
- *
- * @note    The spi_divtable is auto-generated from
- *          `cpu/stm32_common/dist/spi_divtable/spi_divtable.c`
  * @{
  */
-static const uint8_t spi_divtable[2][5] = {
-    {       /* for APB1 @ 20000000Hz */
-        7,  /* -> 78125Hz */
-        5,  /* -> 312500Hz */
-        3,  /* -> 1250000Hz */
-        1,  /* -> 5000000Hz */
-        0   /* -> 10000000Hz */
-    },
-    {       /* for APB2 @ 40000000Hz */
-        7,  /* -> 156250Hz */
-        6,  /* -> 312500Hz */
-        4,  /* -> 1250000Hz */
-        2,  /* -> 5000000Hz */
-        1   /* -> 10000000Hz */
-    }
-};
-
 static const spi_conf_t spi_config[] = {
     {
         .dev      = SPI1,

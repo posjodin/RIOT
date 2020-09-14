@@ -1,6 +1,6 @@
 PKG_NAME=ccn-lite
 PKG_URL=https://github.com/cn-uofbasel/ccn-lite/
-PKG_VERSION=2da4123b055d90c406c08cf2e96704e132220536
+PKG_VERSION=ee0bff932b5ee3f1c7835e787b2d47d2b26e18c7
 PKG_LICENSE=ISC
 
 include $(RIOTBASE)/pkg/pkg.mk
@@ -15,18 +15,18 @@ ifeq (llvm,$(TOOLCHAIN))
   RIOT_CFLAGS += -Wno-char-subscripts
 endif
 
-TOOLCHAIN_FILE = $(PKG_BUILDDIR)/xcompile-toolchain.cmake
+TOOLCHAIN_FILE = $(PKG_SOURCE_DIR)/xcompile-toolchain.cmake
 
 all: $(BINDIR)/ccn-lite.a
 
-$(BINDIR)/ccn-lite.a: $(PKG_BUILDDIR)/bin/lib/libccnl-riot.a
+$(BINDIR)/ccn-lite.a: $(PKG_BUILD_DIR)/lib/libccnl-riot.a
 	cp $< $@
 
-$(PKG_BUILDDIR)/bin/lib/libccnl-riot.a: $(PKG_BUILDDIR)/bin/Makefile
-	$(MAKE) -C $(PKG_BUILDDIR)/bin
+$(PKG_BUILD_DIR)/lib/libccnl-riot.a: $(PKG_BUILD_DIR)/Makefile
+	$(MAKE) -C $(PKG_BUILD_DIR)
 
-$(PKG_BUILDDIR)/bin/Makefile: $(PKG_PREPARED) $(TOOLCHAIN_FILE) | ..cmake_version_supported
-	cmake -B$(PKG_BUILDDIR)/bin -H$(PKG_BUILDDIR)/src \
+$(PKG_BUILD_DIR)/Makefile: $(PKG_PREPARED) $(TOOLCHAIN_FILE) | ..cmake_version_supported
+	cmake -B$(PKG_BUILD_DIR) -H$(PKG_SOURCE_DIR)/src \
 	      -DCMAKE_TOOLCHAIN_FILE=$(TOOLCHAIN_FILE) \
 	      -DCCNL_RIOT=1 -DRIOT_CFLAGS="$(RIOT_CFLAGS)" -DBUILD_TESTING=OFF
 

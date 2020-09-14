@@ -19,18 +19,11 @@
 #ifndef BOARD_H
 #define BOARD_H
 
-#include "lpc2387.h"
+#include "lpc23xx.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/**
- * @name    xtimer tuning values
- * @{
- */
-#define XTIMER_OVERHEAD     7
-/** @} */
 
 /**
  * @name    LED pin definitions and handlers

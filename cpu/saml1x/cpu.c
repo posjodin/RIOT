@@ -136,8 +136,20 @@ void cpu_init(void)
 #ifdef MODULE_PERIPH_GPIO
                          | MCLK_APBAMASK_PORT
 #endif
+#ifdef MODULE_PERIPH_RTC_RTT
+                         | MCLK_APBAMASK_RTC
+#endif
                          ;
 
+
+    /* Disable the RTC module to prevent synchronization issues during CPU init
+       if the RTC was running from a previous boot (e.g wakeup from backup)
+       as the module will be re-init during the boot process */
+    if (RTC->MODE2.CTRLA.bit.ENABLE && IS_ACTIVE(MODULE_PERIPH_RTC_RTT)) {
+        while (RTC->MODE2.SYNCBUSY.reg) {}
+        RTC->MODE2.CTRLA.bit.ENABLE = 0;
+        while (RTC->MODE2.SYNCBUSY.reg) {}
+    }
     /* Software reset the GCLK module to ensure it is re-initialized correctly */
     GCLK->CTRLA.reg = GCLK_CTRLA_SWRST;
     while (GCLK->CTRLA.reg & GCLK_CTRLA_SWRST) {}
@@ -164,6 +176,11 @@ void cpu_init(void)
     _gclk_setup(SAM0_GCLK_32KHZ, GCLK_GENCTRL_GENEN | GCLK_GENCTRL_SRC_XOSC32K);
 #else
     _gclk_setup(SAM0_GCLK_32KHZ, GCLK_GENCTRL_GENEN | GCLK_GENCTRL_SRC_OSCULP32K);
+#endif
+
+#ifdef MODULE_PERIPH_DMA
+    /*  initialize DMA streams */
+    dma_init();
 #endif
 
     /* initialize stdio prior to periph_init() to allow use of DEBUG() there */

@@ -62,6 +62,26 @@ typedef enum {
 #endif /* ndef DOXYGEN */
 /** @} */
 
+/**
+ * @brief   The MCU has a 10 bit DAC
+ */
+#define DAC_RES_BITS        (10)
+
+/**
+ * @brief   The MCU has one DAC Output.
+ */
+#define DAC_NUMOF           (1)
+
+/**
+ * @name    Real time counter configuration
+ * @{
+ */
+#define RTT_MAX_VALUE       (0xffffffff)
+#define RTT_CLOCK_FREQUENCY (32768U)                      /* in Hz */
+#define RTT_MIN_FREQUENCY   (RTT_CLOCK_FREQUENCY / 1024U)  /* in Hz */
+#define RTT_MAX_FREQUENCY   (RTT_CLOCK_FREQUENCY)         /* in Hz */
+/** @} */
+
 #ifdef __cplusplus
 }
 #endif

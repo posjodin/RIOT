@@ -17,8 +17,6 @@
  * @author  Juergen Fitschen <me@jue.yt>
  */
 
-#ifdef MODULE_DOSE
-
 #include "log.h"
 #include "debug.h"
 #include "dose.h"
@@ -46,13 +44,9 @@ void auto_init_dose(void)
     for (unsigned i = 0; i < DOSE_NUM; i++) {
         LOG_DEBUG("[auto_init_netif] initializing dose #%d.\n", i);
 
-        dose_setup(&dose[i], &dose_params[i]);
+        dose_setup(&dose[i], &dose_params[i], i);
         gnrc_netif_ethernet_create(&_netif[i], _netdev_eth_stack[i], DOSE_MAC_STACKSIZE,
                                    DOSE_MAC_PRIO, "dose", (netdev_t *)&dose[i]);
     }
 }
-
-#else
-typedef int dont_be_pedantic;
-#endif /* MODULE_DOSE */
 /** @} */

@@ -1,5 +1,7 @@
 #!/bin/sh
 
+MAKE=${MAKE:-make}
+
 get_cmd_version() {
     if [ -z "$1" ]; then
         return
@@ -80,7 +82,7 @@ get_sys_shell() {
 }
 
 _get_make_shell() {
-    make -sf - 2>/dev/null <<MAKEFILE
+    ${MAKE} -sf - 2>/dev/null <<MAKEFILE
 \$(info \$(realpath \$(SHELL)))
 MAKEFILE
 }
@@ -123,7 +125,7 @@ printf "%25s: %s\n" "native gcc" "$(get_cmd_version gcc)"
 for p in \
          arm-none-eabi \
          avr mips-mti-elf \
-         msp430 \
+         msp430-elf \
          riscv-none-embed \
          xtensa-esp32-elf \
          xtensa-esp8266-elf \
@@ -138,6 +140,7 @@ printf "%s\n" "-----------------------"
 for p in \
          arm-none-eabi \
          mips-mti-elf \
+         msp430-elf \
          riscv-none-embed \
          xtensa-esp32-elf \
          xtensa-esp8266-elf \
@@ -156,7 +159,7 @@ for c in \
          cppcheck \
          doxygen \
          git \
-         make \
+         ${MAKE} \
          openocd \
          python \
          python2 \

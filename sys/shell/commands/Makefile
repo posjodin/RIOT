@@ -5,8 +5,14 @@ SRC = shell_commands.c sc_sys.c
 ifneq (,$(filter app_metadata,$(USEMODULE)))
   SRC += sc_app_metadata.c
 endif
+ifneq (,$(filter dfplayer,$(USEMODULE)))
+  SRC += sc_dfplayer.c
+endif
 ifneq (,$(filter mci,$(USEMODULE)))
   SRC += sc_disk.c
+endif
+ifneq (,$(filter periph_pm,$(USEMODULE)))
+  SRC += sc_pm.c
 endif
 ifneq (,$(filter ps,$(USEMODULE)))
   SRC += sc_ps.c
@@ -80,6 +86,10 @@ ifneq (,$(filter cord_ep,$(USEMODULE)))
   SRC += sc_cord_ep.c
 endif
 
+ifneq (,$(filter openwsn,$(USEPKG)))
+  SRC += sc_openwsn.c
+endif
+
 ifneq (,$(filter periph_rtc,$(USEMODULE)))
   SRC += sc_rtc.c
 endif
@@ -98,6 +108,10 @@ endif
 
 ifneq (,$(filter nimble_netif,$(USEMODULE)))
   SRC += sc_nimble_netif.c
+endif
+
+ifneq (,$(filter nimble_statconn,$(USEMODULE)))
+  SRC += sc_nimble_statconn.c
 endif
 
 ifneq (,$(filter suit_coap,$(USEMODULE)))

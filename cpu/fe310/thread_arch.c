@@ -115,25 +115,27 @@ char *thread_stack_init(thread_task_func_t task_func,
 void thread_print_stack(void)
 {
     int count = 0;
-    uint32_t *sp = (uint32_t *) ((sched_active_thread) ? sched_active_thread->sp : NULL);
-
-    if (sp == NULL) {
+    thread_t *active_thread = thread_get_active();
+    if (!active_thread) {
         return;
     }
+
+    uint32_t *sp = (uint32_t *)active_thread->sp;
 
     printf("printing the current stack of thread %" PRIkernel_pid "\n",
            thread_getpid());
 
 #ifdef DEVELHELP
-    printf("thread name: %s\n", sched_active_thread->name);
-    printf("stack start: 0x%08x\n", (unsigned int)(sched_active_thread->stack_start));
-    printf("stack end  : 0x%08x\n", (unsigned int)(sched_active_thread->stack_start + sched_active_thread->stack_size));
+    printf("thread name: %s\n", active_thread->name);
+    printf("stack start: 0x%08x\n", (unsigned)(active_thread->stack_start));
+    printf("stack end  : 0x%08x\n",
+           (unsigned)(active_thread->stack_start + active_thread->stack_size));
 #endif
 
     printf("  address:      data:\n");
 
     do {
-        printf("  0x%08x:   0x%08x\n", (unsigned int) sp, (unsigned int) *sp);
+        printf("  0x%08x:   0x%08x\n", (unsigned)sp, (unsigned)*sp);
         sp++;
         count++;
     } while (*sp != STACK_MARKER);
@@ -187,10 +189,10 @@ void thread_yield_higher(void)
  */
 void heap_stats(void)
 {
-    extern char _heap_start; /* defined in linker script */
-    extern char _heap_end;   /* defined in linker script */
+    extern char _sheap;     /* defined in linker script */
+    extern char _eheap;     /* defined in linker script */
 
-    long int heap_size = &_heap_end - &_heap_start;
+    long int heap_size = &_eheap - &_sheap;
     struct mallinfo minfo = mallinfo();
     printf("heap: %ld (used %u, free %ld) [bytes]\n",
            heap_size, minfo.uordblks, heap_size - minfo.uordblks);

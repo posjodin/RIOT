@@ -42,7 +42,7 @@
 #define GCOAP_RESOURCE_NO_PATH -2
 
 /* End of the range to pick a random timeout */
-#define TIMEOUT_RANGE_END (COAP_ACK_TIMEOUT * COAP_RANDOM_FACTOR_1000 / 1000)
+#define TIMEOUT_RANGE_END (CONFIG_COAP_ACK_TIMEOUT * CONFIG_COAP_RANDOM_FACTOR_1000 / 1000)
 
 /* Internal functions */
 static void *_event_loop(void *arg);
@@ -150,16 +150,29 @@ static void _on_sock_evt(sock_udp_t *sock, sock_async_flags_t type, void *arg)
             return;
         }
 
-        if (pdu.hdr->code == COAP_CODE_EMPTY) {
-            DEBUG("gcoap: empty messages not handled yet\n");
-            return;
-        }
-
         /* validate class and type for incoming */
         switch (coap_get_code_class(&pdu)) {
-        /* incoming request */
+        /* incoming request or empty */
         case COAP_CLASS_REQ:
-            if (coap_get_type(&pdu) == COAP_TYPE_NON
+            if (coap_get_code_raw(&pdu) == COAP_CODE_EMPTY) {
+                /* ping request */
+                if (coap_get_type(&pdu) == COAP_TYPE_CON) {
+                    coap_hdr_set_type(pdu.hdr, COAP_TYPE_RST);
+
+                    ssize_t bytes = sock_udp_send(sock, _listen_buf,
+                                                  sizeof(coap_hdr_t), &remote);
+                    if (bytes <= 0) {
+                        DEBUG("gcoap: ping response failed: %d\n", (int)bytes);
+                    }
+                } else if (coap_get_type(&pdu) == COAP_TYPE_NON) {
+                    DEBUG("gcoap: empty NON msg\n");
+                }
+                else {
+                    goto empty_as_response;
+                }
+            }
+            /* normal request */
+            else if (coap_get_type(&pdu) == COAP_TYPE_NON
                     || coap_get_type(&pdu) == COAP_TYPE_CON) {
                 size_t pdu_len = _handle_req(&pdu, _listen_buf, sizeof(_listen_buf),
                                              &remote);
@@ -175,6 +188,10 @@ static void _on_sock_evt(sock_udp_t *sock, sock_async_flags_t type, void *arg)
                 DEBUG("gcoap: illegal request type: %u\n", coap_get_type(&pdu));
             }
             break;
+
+empty_as_response:
+            DEBUG("gcoap: empty ack/reset not handled yet\n");
+            return;
 
         /* incoming response */
         case COAP_CLASS_SUCCESS:
@@ -230,10 +247,10 @@ static void _on_resp_timeout(void *arg) {
 #ifdef CONFIG_GCOAP_NO_RETRANS_BACKOFF
         unsigned i        = 0;
 #else
-        unsigned i        = COAP_MAX_RETRANSMIT - memo->send_limit;
+        unsigned i        = CONFIG_COAP_MAX_RETRANSMIT - memo->send_limit;
 #endif
-        uint32_t timeout  = ((uint32_t)COAP_ACK_TIMEOUT << i) * US_PER_SEC;
-#if COAP_RANDOM_FACTOR_1000 > 1000
+        uint32_t timeout  = ((uint32_t)CONFIG_COAP_ACK_TIMEOUT << i) * US_PER_SEC;
+#if CONFIG_COAP_RANDOM_FACTOR_1000 > 1000
         uint32_t end = ((uint32_t)TIMEOUT_RANGE_END << i) * US_PER_SEC;
         timeout = random_uint32_range(timeout, end);
 #endif
@@ -640,67 +657,34 @@ int gcoap_req_init(coap_pkt_t *pdu, uint8_t *buf, size_t len,
     pdu->hdr = (coap_hdr_t *)buf;
 
     /* generate token */
+    uint16_t msgid = (uint16_t)atomic_fetch_add(&_coap_state.next_message_id, 1);
+    ssize_t res;
+    if (code) {
 #if CONFIG_GCOAP_TOKENLEN
-    uint8_t token[CONFIG_GCOAP_TOKENLEN];
-    for (size_t i = 0; i < CONFIG_GCOAP_TOKENLEN; i += 4) {
-        uint32_t rand = random_uint32();
-        memcpy(&token[i],
-               &rand,
-               (CONFIG_GCOAP_TOKENLEN - i >= 4) ? 4 : CONFIG_GCOAP_TOKENLEN - i);
-    }
-    uint16_t msgid = (uint16_t)atomic_fetch_add(&_coap_state.next_message_id, 1);
-    ssize_t res = coap_build_hdr(pdu->hdr, COAP_TYPE_NON, &token[0],
-                                 CONFIG_GCOAP_TOKENLEN, code, msgid);
+        uint8_t token[CONFIG_GCOAP_TOKENLEN];
+        for (size_t i = 0; i < CONFIG_GCOAP_TOKENLEN; i += 4) {
+            uint32_t rand = random_uint32();
+            memcpy(&token[i],
+                   &rand,
+                   (CONFIG_GCOAP_TOKENLEN - i >= 4) ? 4 : CONFIG_GCOAP_TOKENLEN - i);
+        }
+        res = coap_build_hdr(pdu->hdr, COAP_TYPE_NON, &token[0],
+                             CONFIG_GCOAP_TOKENLEN, code, msgid);
 #else
-    uint16_t msgid = (uint16_t)atomic_fetch_add(&_coap_state.next_message_id, 1);
-    ssize_t res = coap_build_hdr(pdu->hdr, COAP_TYPE_NON, NULL,
-                                 CONFIG_GCOAP_TOKENLEN, code, msgid);
+        res = coap_build_hdr(pdu->hdr, COAP_TYPE_NON, NULL,
+                             CONFIG_GCOAP_TOKENLEN, code, msgid);
 #endif
+    }
+    else {
+        /* ping request */
+        res = coap_build_hdr(pdu->hdr, COAP_TYPE_CON, NULL, 0, code, msgid);
+    }
 
-    coap_pkt_init(pdu, buf, len - CONFIG_GCOAP_REQ_OPTIONS_BUF, res);
+    coap_pkt_init(pdu, buf, len, res);
     if (path != NULL) {
         res = coap_opt_add_uri_path(pdu, path);
     }
     return (res > 0) ? 0 : res;
-}
-
-/*
- * Assumes pdu.payload_len attribute was reduced in gcoap_xxx_init() to
- * ensure enough space in PDU buffer to write Content-Format option and
- * payload marker here.
- */
-ssize_t gcoap_finish(coap_pkt_t *pdu, size_t payload_len, unsigned format)
-{
-    assert( !(pdu->options_len) ||
-            !(payload_len) ||
-            (format == COAP_FORMAT_NONE) ||
-            (pdu->options[pdu->options_len-1].opt_num < COAP_OPT_CONTENT_FORMAT));
-
-    if (payload_len) {
-        /* determine Content-Format option length */
-        unsigned format_optlen = 1;
-        if (format == COAP_FORMAT_NONE) {
-            format_optlen = 0;
-        }
-        else if (format > 255) {
-            format_optlen = 3;
-        }
-        else if (format > 0) {
-            format_optlen = 2;
-        }
-
-        /* move payload to accommodate option and payload marker */
-        memmove(pdu->payload+format_optlen+1, pdu->payload, payload_len);
-
-        if (format_optlen) {
-            coap_opt_add_uint(pdu, COAP_OPT_CONTENT_FORMAT, format);
-        }
-        *pdu->payload++ = 0xFF;
-    }
-    /* must write option before updating PDU with actual length */
-    pdu->payload_len = payload_len;
-
-    return pdu->payload_len + (pdu->payload - (uint8_t *)pdu->hdr);
 }
 
 size_t gcoap_req_send(const uint8_t *buf, size_t len,
@@ -749,9 +733,9 @@ size_t gcoap_req_send(const uint8_t *buf, size_t len,
                 }
             }
             if (memo->msg.data.pdu_buf) {
-                memo->send_limit  = COAP_MAX_RETRANSMIT;
-                timeout           = (uint32_t)COAP_ACK_TIMEOUT * US_PER_SEC;
-#if COAP_RANDOM_FACTOR_1000 > 1000
+                memo->send_limit  = CONFIG_COAP_MAX_RETRANSMIT;
+                timeout           = (uint32_t)CONFIG_COAP_ACK_TIMEOUT * US_PER_SEC;
+#if CONFIG_COAP_RANDOM_FACTOR_1000 > 1000
                 timeout = random_uint32_range(timeout, TIMEOUT_RANGE_END * US_PER_SEC);
 #endif
             }
@@ -817,7 +801,7 @@ int gcoap_resp_init(coap_pkt_t *pdu, uint8_t *buf, size_t len, unsigned code)
 
     pdu->options_len = 0;
     pdu->payload     = buf + header_len;
-    pdu->payload_len = len - header_len - CONFIG_GCOAP_RESP_OPTIONS_BUF;
+    pdu->payload_len = len - header_len;
 
     if (coap_get_observe(pdu) == COAP_OBS_REGISTER) {
         /* generate initial notification value */
@@ -846,7 +830,7 @@ int gcoap_obs_init(coap_pkt_t *pdu, uint8_t *buf, size_t len,
                                     memo->token_len, COAP_CODE_CONTENT, msgid);
 
     if (hdrlen > 0) {
-        coap_pkt_init(pdu, buf, len - CONFIG_GCOAP_OBS_OPTIONS_BUF, hdrlen);
+        coap_pkt_init(pdu, buf, len, hdrlen);
 
         uint32_t now       = xtimer_now_usec();
         pdu->observe_value = (now >> GCOAP_OBS_TICK_EXPONENT) & 0xFFFFFF;

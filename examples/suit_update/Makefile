@@ -8,7 +8,10 @@ BOARD ?= samr21-xpro
 RIOTBASE ?= $(CURDIR)/../..
 
 # lower pktbuf size to something sufficient for this application
-CFLAGS += -DGNRC_PKTBUF_SIZE=2000
+# Set GNRC_PKTBUF_SIZE via CFLAGS if not being set via Kconfig.
+ifndef CONFIG_GNRC_PKTBUF_SIZE
+  CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=2000
+endif
 
 #
 # Networking
@@ -22,8 +25,7 @@ CFLAGS += -DGNRC_PKTBUF_SIZE=2000
 USEMODULE += auto_init_gnrc_netif
 # Specify the mandatory networking modules for IPv6 and UDP
 USEMODULE += gnrc_ipv6_router_default
-USEMODULE += gnrc_udp
-USEMODULE += gnrc_sock_udp
+USEMODULE += sock_udp
 # Additional networking modules that can be dropped if not needed
 USEMODULE += gnrc_icmpv6_echo
 
@@ -102,6 +104,6 @@ include $(RIOTBASE)/Makefile.include
 .PHONY: host-tools
 
 host-tools:
-	$(Q)env -u CC -u CFLAGS make -C $(RIOTTOOLS)
+	$(Q)env -u CC -u CFLAGS $(MAKE) -C $(RIOTTOOLS)
 
 include $(RIOTMAKE)/default-radio-settings.inc.mk

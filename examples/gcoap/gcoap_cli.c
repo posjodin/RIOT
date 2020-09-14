@@ -185,7 +185,7 @@ static ssize_t _stats_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len, void *c
     /* read coap method type in packet */
     unsigned method_flag = coap_method2flag(coap_get_code_detail(pdu));
 
-    switch(method_flag) {
+    switch (method_flag) {
         case COAP_GET:
             gcoap_resp_init(pdu, buf, len, COAP_CODE_CONTENT);
             coap_opt_add_format(pdu, COAP_FORMAT_TEXT);
@@ -279,14 +279,13 @@ static bool _parse_endpoint(sock_udp_ep_t *remote,
 static size_t _send(uint8_t *buf, size_t len, char *addr_str, char *port_str)
 {
     size_t bytes_sent;
-
     sock_udp_ep_t *remote;
+    sock_udp_ep_t new_remote;
 
     if (_proxied) {
         remote = &_proxy_remote;
     }
     else {
-        sock_udp_ep_t new_remote;
         if (!_parse_endpoint(&new_remote, addr_str, port_str)) {
             return 0;
         }
@@ -303,7 +302,7 @@ static size_t _send(uint8_t *buf, size_t len, char *addr_str, char *port_str)
 int gcoap_cli_cmd(int argc, char **argv)
 {
     /* Ordered like the RFC method code numbers, but off by 1. GET is code 0. */
-    char *method_codes[] = {"get", "post", "put"};
+    char *method_codes[] = {"ping", "get", "post", "put"};
     uint8_t buf[CONFIG_GCOAP_PDU_BUF_SIZE];
     coap_pkt_t pdu;
     size_t len;
@@ -352,7 +351,7 @@ int gcoap_cli_cmd(int argc, char **argv)
         return 1;
     }
 
-    /* if not 'info' and 'proxy', must be a method code */
+    /* if not 'info' and 'proxy', must be a method code or ping */
     int code_pos = -1;
     for (size_t i = 0; i < ARRAY_SIZE(method_codes); i++) {
         if (strcmp(argv[1], method_codes[i]) == 0) {
@@ -364,32 +363,33 @@ int gcoap_cli_cmd(int argc, char **argv)
     }
 
     /* parse options */
-    int apos          = 2;               /* position of address argument */
-    unsigned msg_type = COAP_TYPE_NON;
+    int apos = 2;       /* position of address argument */
+    /* ping must be confirmable */
+    unsigned msg_type = (!code_pos ? COAP_TYPE_CON : COAP_TYPE_NON);
     if (argc > apos && strcmp(argv[apos], "-c") == 0) {
         msg_type = COAP_TYPE_CON;
         apos++;
     }
 
-    /*
-     * "get" (code_pos 0) must have exactly apos + 3 arguments
-     * while "post" (code_pos 1) and "put" (code_pos 2) and must have exactly
-     * apos + 4 arguments
-     */
-    if (((argc == apos + 3) && (code_pos == 0)) ||
-        ((argc == apos + 4) && (code_pos != 0))) {
+    if (((argc == apos + 2) && (code_pos == 0)) ||    /* ping */
+        ((argc == apos + 3) && (code_pos == 1)) ||    /* get */
+        ((argc == apos + 4) && (code_pos > 1))) {     /* post or put */
 
-        char *uri = argv[apos+2];
-        int uri_len = strlen(argv[apos+2]);
+        char *uri = NULL;
+        int uri_len = 0;
+        if (code_pos) {
+            uri = argv[apos+2];
+            uri_len = strlen(argv[apos+2]);
+        }
 
         if (_proxied) {
             uri_len = snprintf(proxy_uri, 64, "coap://[%s]:%s%s", argv[apos], argv[apos+1], uri);
             uri = proxy_uri;
 
-            gcoap_req_init(&pdu, &buf[0], CONFIG_GCOAP_PDU_BUF_SIZE, code_pos+1, NULL);
+            gcoap_req_init(&pdu, &buf[0], CONFIG_GCOAP_PDU_BUF_SIZE, code_pos, NULL);
         }
         else{
-            gcoap_req_init(&pdu, &buf[0], CONFIG_GCOAP_PDU_BUF_SIZE, code_pos+1, uri);
+            gcoap_req_init(&pdu, &buf[0], CONFIG_GCOAP_PDU_BUF_SIZE, code_pos, uri);
         }
         coap_hdr_set_type(pdu.hdr, msg_type);
 
@@ -451,13 +451,14 @@ int gcoap_cli_cmd(int argc, char **argv)
     else {
         printf("usage: %s <get|post|put> [-c] <addr>[%%iface] <port> <path> [data]\n",
                argv[0]);
+        printf("       %s ping <addr>[%%iface] <port>\n", argv[0]);
         printf("Options\n");
         printf("    -c  Send confirmably (defaults to non-confirmable)\n");
         return 1;
     }
 
     end:
-    printf("usage: %s <get|post|put|proxy|info>\n", argv[0]);
+    printf("usage: %s <get|post|put|ping|proxy|info>\n", argv[0]);
     return 1;
 }
 

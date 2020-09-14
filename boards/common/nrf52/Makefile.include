@@ -1,18 +1,19 @@
 # include this module into the build
 INCLUDES += -I$(RIOTBOARD)/common/nrf52/include
 
-# set default port depending on operating system
-PORT_LINUX ?= /dev/ttyACM0
-PORT_DARWIN ?= $(firstword $(sort $(wildcard /dev/tty.usbmodem*)))
-include $(RIOTMAKE)/tools/serial.inc.mk
+ifeq (bmp,$(PROGRAMMER))
+  # On Blackmagic Probe, the first ACM is used to connect to the gdb server,
+  # the second is the BMP's UART interface
+  PORT_LINUX ?= /dev/ttyACM1
+  PORT_DARWIN ?= $(wordlist 2, 2, $(sort $(wildcard /dev/tty.usbmodem*)))
+else
+  # configure the serial terminal
+  PORT_LINUX ?= /dev/ttyACM0
+  PORT_DARWIN ?= $(firstword $(sort $(wildcard /dev/tty.usbmodem*)))
+endif
 
-# The following configuration are dependencies specific, specifically they need
-# to know if 'nordic_softdevice_ble' is used. The dependencies are not known
-# because BOARDs Makefile.include are included before Makefile.dep
-# This HACK can be removed either when Makefile.include is included after
-# Makefile.features (see #9913) or if 'nordic_softdevice_ble' is deprecated.
--include $(APPDIR)/Makefile.board.dep
-include $(RIOTBOARD)/$(BOARD)/Makefile.dep
+# setup serial terminal
+include $(RIOTMAKE)/tools/serial.inc.mk
 
 PROGRAMMER ?= jlink
 ifeq (jlink,$(PROGRAMMER))
@@ -63,4 +64,6 @@ else ifeq (openocd,$(PROGRAMMER))
   DEBUG_ADAPTER ?= jlink
   OPENOCD_CONFIG = $(RIOTBOARD)/common/nrf52/dist/openocd.cfg
   include $(RIOTMAKE)/tools/openocd.inc.mk
+else ifeq (bmp,$(PROGRAMMER))
+  include $(RIOTMAKE)/tools/bmp.inc.mk
 endif

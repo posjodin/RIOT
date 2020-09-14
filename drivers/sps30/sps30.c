@@ -50,6 +50,8 @@ typedef enum {
     SPS30_CMD_RD_ARTICLE      = 0xD025, /**< Read article code */
     SPS30_CMD_RD_SERIAL       = 0xD033, /**< Read serial number */
     SPS30_CMD_RESET           = 0xD304, /**< Reset */
+    SPS30_CMD_SLEEP           = 0x1001, /**< Sleep */
+    SPS30_CMD_WAKE_UP         = 0x1103  /**< Wake-up */
 } sps30_cmd_t;
 /** @} */
 
@@ -142,7 +144,7 @@ static int _rx_tx_data(const sps30_t *dev, uint16_t ptr_addr,
                        uint8_t *data, size_t len, bool read)
 {
     int res = 0;
-    unsigned retr = SPS30_ERROR_RETRY;
+    unsigned retr = CONFIG_SPS30_ERROR_RETRY;
 
     if (i2c_acquire(dev->p.i2c_dev) != 0) {
         LOG_ERROR("could not acquire I2C bus %d\n", dev->p.i2c_dev);
@@ -282,4 +284,19 @@ int sps30_reset(const sps30_t *dev)
 {
     assert(dev);
     return _rx_tx_data(dev, SPS30_CMD_RESET, NULL, 0, false);
+}
+
+int sps30_sleep(const sps30_t *dev)
+{
+    assert(dev);
+    sps30_stop_measurement(dev);
+    return _rx_tx_data(dev, SPS30_CMD_SLEEP, NULL, 0, false);
+}
+
+int sps30_wakeup(const sps30_t *dev)
+{
+    assert(dev);
+    /* Send I2C start stop sequence to re-enable I2C interface on sensor */
+    i2c_write_bytes(dev->p.i2c_dev, SPS30_I2C_ADDR, NULL, 0, 0);
+    return _rx_tx_data(dev, SPS30_CMD_WAKE_UP, NULL, 0, false);
 }

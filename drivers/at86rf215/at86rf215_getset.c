@@ -114,6 +114,18 @@ uint16_t at86rf215_get_channel_spacing(at86rf215_t *dev) {
     return 25 * at86rf215_reg_read(dev, dev->RF->RG_CS);
 }
 
+uint8_t at86rf215_get_phy_mode(at86rf215_t *dev)
+{
+    switch (at86rf215_reg_read(dev, dev->BBC->RG_PC) & PC_PT_MASK) {
+    case 0x1: return IEEE802154_PHY_MR_FSK;
+    case 0x2: return IEEE802154_PHY_MR_OFDM;
+    case 0x3: return at86rf215_OQPSK_is_legacy(dev)
+                ? IEEE802154_PHY_OQPSK
+                : IEEE802154_PHY_MR_OQPSK;
+    default:  return IEEE802154_PHY_DISABLED;
+    }
+}
+
 uint16_t at86rf215_get_pan(const at86rf215_t *dev, uint8_t filter)
 {
     if (filter > 3) {
@@ -192,6 +204,38 @@ int8_t at86rf215_get_ed_level(at86rf215_t *dev)
     return at86rf215_reg_read(dev, dev->RF->RG_EDV);
 }
 
+void at86rf215_enable_rpc(at86rf215_t *dev)
+{
+    if (!(dev->flags & AT86RF215_OPT_RPC) || !CONFIG_AT86RF215_RPC_EN) {
+        return;
+    }
+
+    /* no Reduced Power mode available for OFDM */
+
+#ifdef MODULE_NETDEV_IEEE802154_MR_OQPSK
+    {
+        /* MR-O-QPSK */
+        at86rf215_reg_or(dev, dev->BBC->RG_OQPSKC2, OQPSKC2_RPC_MASK);
+    }
+#endif
+}
+
+void at86rf215_disable_rpc(at86rf215_t *dev)
+{
+    if (!(dev->flags & AT86RF215_OPT_RPC) || !CONFIG_AT86RF215_RPC_EN) {
+        return;
+    }
+
+    /* no Reduced Power mode available for OFDM */
+
+#ifdef MODULE_NETDEV_IEEE802154_MR_OQPSK
+    {
+        /* MR-O-QPSK */
+        at86rf215_reg_and(dev, dev->BBC->RG_OQPSKC2, ~OQPSKC2_RPC_MASK);
+    }
+#endif
+}
+
 void at86rf215_set_option(at86rf215_t *dev, uint16_t option, bool state)
 {
     /* set option field */
@@ -231,7 +275,14 @@ void at86rf215_set_option(at86rf215_t *dev, uint16_t option, bool state)
             }
 
             break;
+        case AT86RF215_OPT_RPC:
+            if (state) {
+                at86rf215_enable_rpc(dev);
+            } else {
+                at86rf215_disable_rpc(dev);
+            }
 
+            break;
         default:
             /* do nothing */
             break;

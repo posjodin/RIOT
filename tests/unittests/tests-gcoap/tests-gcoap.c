@@ -161,7 +161,7 @@ static void test_gcoap__client_put_req(void)
 static void test_gcoap__client_put_req_overfill(void)
 {
     /* header 4, token 2, path 11, format 1, marker 1 = 19 */
-    uint8_t buf[18+CONFIG_GCOAP_REQ_OPTIONS_BUF];
+    uint8_t buf[18];
     coap_pkt_t pdu;
     ssize_t len;
     char path[] = "/riot/value";
@@ -201,6 +201,28 @@ static void test_gcoap__client_get_path_defer(void)
     char uri[CONFIG_NANOCOAP_URI_MAX] = {0};
     coap_get_uri_path(&pdu, (uint8_t *)&uri[0]);
     TEST_ASSERT_EQUAL_STRING(&path[0], &uri[0]);
+}
+
+/*
+ * Validate client CoAP ping empty message request.
+ */
+static void test_gcoap__client_ping(void)
+{
+    uint8_t buf[CONFIG_GCOAP_PDU_BUF_SIZE];
+    coap_pkt_t pdu;
+    int res;
+
+    res = gcoap_req_init(&pdu, buf, CONFIG_GCOAP_PDU_BUF_SIZE, COAP_CODE_EMPTY,
+                         NULL);
+
+    TEST_ASSERT_EQUAL_INT(0, res);
+    TEST_ASSERT_EQUAL_INT(COAP_CODE_EMPTY, coap_get_code(&pdu));
+    TEST_ASSERT_EQUAL_INT(COAP_TYPE_CON, coap_get_type(&pdu));
+    TEST_ASSERT_EQUAL_INT(0, coap_get_token_len(&pdu));
+
+    /* confirm length */
+    res = coap_opt_finish(&pdu, COAP_OPT_FINISH_NONE);
+    TEST_ASSERT_EQUAL_INT(4, res);
 }
 
 /*
@@ -371,6 +393,7 @@ Test *tests_gcoap_tests(void)
         new_TestFixture(test_gcoap__client_put_req),
         new_TestFixture(test_gcoap__client_put_req_overfill),
         new_TestFixture(test_gcoap__client_get_path_defer),
+        new_TestFixture(test_gcoap__client_ping),
         new_TestFixture(test_gcoap__server_get_req),
         new_TestFixture(test_gcoap__server_get_resp),
         new_TestFixture(test_gcoap__server_con_req),

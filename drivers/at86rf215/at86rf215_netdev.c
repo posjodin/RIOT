@@ -327,6 +327,10 @@ static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len)
 
         case NETOPT_CHANNEL_PAGE:
             assert(max_len >= sizeof(uint16_t));
+            if (at86rf215_get_phy_mode(dev) != IEEE802154_PHY_OQPSK) {
+                return -ENOTSUP;
+            }
+
             ((uint8_t *)val)[1] = 0;
             ((uint8_t *)val)[0] = is_subGHz(dev) ? 2 : 0;
             return sizeof(uint16_t);
@@ -384,6 +388,50 @@ static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len)
             res = max_len;
             break;
 
+        case NETOPT_IEEE802154_PHY:
+            assert(max_len >= sizeof(int8_t));
+            *((int8_t *)val) = at86rf215_get_phy_mode(dev);
+            res = max_len;
+            break;
+
+#ifdef MODULE_NETDEV_IEEE802154_MR_OFDM
+        case NETOPT_MR_OFDM_OPTION:
+            assert(max_len >= sizeof(int8_t));
+            *((int8_t *)val) = at86rf215_OFDM_get_option(dev);
+            res = max_len;
+            break;
+
+        case NETOPT_MR_OFDM_MCS:
+            assert(max_len >= sizeof(int8_t));
+            *((int8_t *)val) = at86rf215_OFDM_get_scheme(dev);
+            res = max_len;
+            break;
+#endif /* MODULE_NETDEV_IEEE802154_MR_OFDM */
+#ifdef MODULE_NETDEV_IEEE802154_MR_OQPSK
+        case NETOPT_MR_OQPSK_CHIPS:
+            assert(max_len >= sizeof(int16_t));
+            switch (at86rf215_OQPSK_get_chips(dev)) {
+            case 0: *((int16_t *)val) =  100; break;
+            case 1: *((int16_t *)val) =  200; break;
+            case 2: *((int16_t *)val) = 1000; break;
+            case 3: *((int16_t *)val) = 2000; break;
+            }
+            res = max_len;
+            break;
+
+        case NETOPT_MR_OQPSK_RATE:
+            assert(max_len >= sizeof(int8_t));
+            *((int8_t *)val) = at86rf215_OQPSK_get_mode(dev);
+            res = max_len;
+            break;
+#endif /* MODULE_NETDEV_IEEE802154_MR_OQPSK */
+#ifdef MODULE_NETDEV_IEEE802154_OQPSK
+        case NETOPT_OQPSK_RATE:
+            assert(max_len >= sizeof(int8_t));
+            *((int8_t *)val) = at86rf215_OQPSK_get_mode_legacy(dev);
+            res = max_len;
+            break;
+#endif /* MODULE_NETDEV_IEEE802154_OQPSK */
         default:
             res = -ENOTSUP;
             break;
@@ -528,6 +576,118 @@ static int _set(netdev_t *netdev, netopt_t opt, const void *val, size_t len)
             res = sizeof(int8_t);
             break;
 
+        case NETOPT_IEEE802154_PHY:
+            assert(len <= sizeof(uint8_t));
+            switch (*(uint8_t *)val) {
+#ifdef MODULE_NETDEV_IEEE802154_OQPSK
+            case IEEE802154_PHY_OQPSK:
+                at86rf215_configure_legacy_OQPSK(dev, at86rf215_OQPSK_get_mode_legacy(dev));
+                res = sizeof(uint8_t);
+                break;
+#endif /* MODULE_NETDEV_IEEE802154_OQPSK */
+#ifdef MODULE_NETDEV_IEEE802154_MR_OQPSK
+            case IEEE802154_PHY_MR_OQPSK:
+                at86rf215_configure_OQPSK(dev,
+                                          at86rf215_OQPSK_get_chips(dev),
+                                          at86rf215_OQPSK_get_mode(dev));
+                res = sizeof(uint8_t);
+                break;
+#endif /* MODULE_NETDEV_IEEE802154_MR_OQPSK */
+#ifdef MODULE_NETDEV_IEEE802154_MR_OFDM
+            case IEEE802154_PHY_MR_OFDM:
+                at86rf215_configure_OFDM(dev,
+                                         at86rf215_OFDM_get_option(dev),
+                                         at86rf215_OFDM_get_scheme(dev));
+                res = sizeof(uint8_t);
+                break;
+#endif /* MODULE_NETDEV_IEEE802154_MR_OFDM */
+            default:
+                return -ENOTSUP;
+            }
+            break;
+
+#ifdef MODULE_NETDEV_IEEE802154_MR_OFDM
+        case NETOPT_MR_OFDM_OPTION:
+            if (at86rf215_get_phy_mode(dev) != IEEE802154_PHY_MR_OFDM) {
+                return -ENOTSUP;
+            }
+
+            assert(len <= sizeof(uint8_t));
+            if (at86rf215_OFDM_set_option(dev, *((const uint8_t *)val)) == 0) {
+                res = sizeof(uint8_t);
+            } else {
+                res = -ERANGE;
+            }
+            break;
+
+        case NETOPT_MR_OFDM_MCS:
+            if (at86rf215_get_phy_mode(dev) != IEEE802154_PHY_MR_OFDM) {
+                return -ENOTSUP;
+            }
+
+            assert(len <= sizeof(uint8_t));
+            if (at86rf215_OFDM_set_scheme(dev, *((const uint8_t *)val)) == 0) {
+                res = sizeof(uint8_t);
+            } else {
+                res = -ERANGE;
+            }
+            break;
+#endif /* MODULE_NETDEV_IEEE802154_MR_OFDM */
+#ifdef MODULE_NETDEV_IEEE802154_MR_OQPSK
+        case NETOPT_MR_OQPSK_CHIPS:
+            if (at86rf215_get_phy_mode(dev) != IEEE802154_PHY_MR_OQPSK) {
+                return -ENOTSUP;
+            }
+
+            uint8_t chips;
+            assert(len <= sizeof(uint16_t));
+            if (*((const uint16_t *)val) == 100) {
+                chips = 0;
+            } else if (*((const uint16_t *)val) == 200) {
+                chips = 1;
+            } else if (*((const uint16_t *)val) == 1000) {
+                chips = 2;
+            } else if (*((const uint16_t *)val) == 2000) {
+                chips = 3;
+            } else {
+                res = -EINVAL;
+                break;
+            }
+
+            if (at86rf215_OQPSK_set_chips(dev, chips) == 0) {
+                res = sizeof(uint8_t);
+            } else {
+                res = -ERANGE;
+            }
+            break;
+
+        case NETOPT_MR_OQPSK_RATE:
+            if (at86rf215_get_phy_mode(dev) != IEEE802154_PHY_MR_OQPSK) {
+                return -ENOTSUP;
+            }
+
+            assert(len <= sizeof(uint8_t));
+            if (at86rf215_OQPSK_set_mode(dev, *(uint8_t *)val) == 0) {
+                res = sizeof(uint8_t);
+            } else {
+                res = -ERANGE;
+            }
+            break;
+#endif /* MODULE_NETDEV_IEEE802154_MR_OQPSK */
+#ifdef MODULE_NETDEV_IEEE802154_OQPSK
+        case NETOPT_OQPSK_RATE:
+            if (at86rf215_get_phy_mode(dev) != IEEE802154_PHY_OQPSK) {
+                return -ENOTSUP;
+            }
+
+            assert(len <= sizeof(uint8_t));
+            if (at86rf215_OQPSK_set_mode_legacy(dev, *(uint8_t *)val) == 0) {
+                res = sizeof(uint8_t);
+            } else {
+                res = -ERANGE;
+            }
+            break;
+#endif /* MODULE_NETDEV_IEEE802154_OQPSK */
         default:
             break;
     }
@@ -703,6 +863,7 @@ static void _handle_edc(at86rf215_t *dev)
         dev->state = AT86RF215_STATE_IDLE;
 
         at86rf215_enable_baseband(dev);
+        at86rf215_enable_rpc(dev);
         at86rf215_tx_done(dev);
 
         netdev->event_callback(netdev, NETDEV_EVENT_TX_MEDIUM_BUSY);
@@ -784,6 +945,7 @@ static void _isr(netdev_t *netdev)
         } else if (rf_irq_mask & RF_IRQ_TRXRDY) {
             /* disable baseband for energy detection */
             at86rf215_disable_baseband(dev);
+            at86rf215_disable_rpc(dev);
             /* switch to state RX for energy detection */
             at86rf215_rf_cmd(dev, CMD_RF_RX);
             /* start energy measurement */

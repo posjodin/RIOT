@@ -41,13 +41,15 @@ TEST_INTERACTIVE_DELAY = int(os.environ.get('TEST_INTERACTIVE_DELAY') or 1)
 TESTRUNNER_RESET_AFTER_TERM = int(os.environ.get('TESTRUNNER_RESET_AFTER_TERM')
                                   or '0')
 
+MAKE = os.environ.get('MAKE', 'make')
+
 
 def _reset_board(env):
     if MAKE_RESET_DELAY > 0:
         time.sleep(MAKE_RESET_DELAY)
 
     try:
-        subprocess.check_output(('make', 'reset'), env=env,
+        subprocess.check_output((MAKE, 'reset'), env=env,
                                 stderr=subprocess.PIPE)
     except subprocess.CalledProcessError:
         # make reset yields error on some boards even if successful
@@ -74,7 +76,7 @@ def setup_child(timeout=10, spawnclass=pexpect.spawnu, env=None, logfile=None):
     # the serial terminal. This gives time for stdio to be ready.
     time.sleep(MAKE_TERM_CONNECT_DELAY)
 
-    child = spawnclass("make cleanterm", env=env, timeout=timeout,
+    child = spawnclass("{} cleanterm".format(MAKE), env=env, timeout=timeout,
                        codec_errors='replace', echo=False)
 
     # on many platforms, the termprog needs a short while to be ready...
@@ -89,11 +91,19 @@ def setup_child(timeout=10, spawnclass=pexpect.spawnu, env=None, logfile=None):
 
 
 def teardown_child(child):
+    pid = child.pid
     try:
-        os.killpg(os.getpgid(child.pid), signal.SIGKILL)
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
     except ProcessLookupError:
         print("Process already stopped")
-
+    else:
+        time.sleep(1)
+        # kill still lingering processes
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+        except ProcessLookupError:
+            # This is what we actually wanted
+            pass
     child.close()
 
 

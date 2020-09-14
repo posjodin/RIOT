@@ -63,6 +63,7 @@ extern "C" {
  */
 #ifdef __ARM_FEATURE_CLZ
 #define BITARITHM_LSB_BUILTIN
+#define BITARITHM_HAS_CLZ
 #else
 #define BITARITHM_LSB_LOOKUP
 #endif
@@ -163,6 +164,12 @@ extern "C" {
  */
 #define BACKUP_RAM_DATA __attribute__((section(".backup.data")))
 #endif /* CPU_HAS_BACKUP_RAM */
+
+
+/**
+ * @brief   This arch uses the inlined irq API.
+ */
+#define IRQ_API_INLINED     (1)
 
 #ifdef __cplusplus
 }
