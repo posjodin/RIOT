@@ -110,6 +110,9 @@ endif
 ifneq (,$(filter sema,$(USEMODULE)))
   DIRS += sema
 endif
+ifneq (,$(filter sim7020 sim7020_%,$(USEMODULE)))
+  DIRS += net/sim7020
+endif
 ifneq (,$(filter sixlowpan,$(USEMODULE)))
   DIRS += net/network_layer/sixlowpan
 endif
