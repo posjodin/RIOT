@@ -502,12 +502,12 @@ void emcute_run(uint16_t port, const char *id)
     timer.callback = time_evt;
     timer.arg = NULL;
     mutex_init(&txlock);
-
+    mutex_lock(&txlock);
     if (sock_udp_create(&sock, &local, NULL, 0) < 0) {
         LOG_ERROR("[emcute] unable to open UDP socket on port %i\n", (int)port);
         return;
     }
-
+    mutex_unlock(&txlock);
     uint32_t start = xtimer_now_usec();
     uint32_t t_out = (EMCUTE_KEEPALIVE * US_PER_SEC);
 
