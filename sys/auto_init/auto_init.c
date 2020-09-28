@@ -260,4 +260,12 @@ void auto_init(void)
             auto_init_dfplayer();
         }
     }
+    if (IS_USED(MODULE_AUTO_INIT_SIM7020)) {
+        printf("auto init sim702\n");
+        extern int sim7020_init(void);
+        sim7020_init();
+
+    }
+    else
+      printf("Do tno auto init sim702\n");      
 }

@@ -126,3 +126,7 @@ endif
 ifneq (,$(filter prng,$(USEMODULE)))
   include $(RIOTBASE)/sys/random/Makefile.include
 endif
+
+ifneq (,$(filter sim7020_sock%,$(USEMODULE)))
+  include $(RIOTBASE)/sys/net/sim7020/Makefile.include
+endif

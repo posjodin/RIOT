@@ -1,6 +1,14 @@
 #ifndef SIM7020_H
 #define SIM7020_H
 
+#ifndef SIM7020_UART_DEV
+#define SIM7020_UART_DEV UART_DEV(1)
+#endif
+
+#ifndef SIM7020_BAUDRATE
+#define SIM7020_BAUDRATE 9600
+#endif
+
 #ifndef AT_RADIO_MAX_RECV_LEN
 #define AT_RADIO_MAX_RECV_LEN 1024
 #endif
@@ -12,7 +20,7 @@
 typedef void (* sim7020_recv_callback_t)(void *,
                             const uint8_t *data, uint16_t datalen);
 
-int sim7020_init(uint8_t uart, uint32_t baudrate);
+int sim7020_init(void);
 int sim7020_register(void);
 int sim7020_activate(void);
 int sim7020_status(void);

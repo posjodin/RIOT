@@ -16,6 +16,7 @@
 #include "net/ipv4/addr.h"
 #include "net/ipv6/addr.h"
 #include "net/sock/udp.h"
+#include "net/netstats.h"
 
 #include "at.h"
 #include "xtimer.h"
@@ -45,9 +46,11 @@ struct sock_sim7020 {
 };
 typedef struct sock_sim7020 sim7020_socket_t;
 
+static netstats_t netstats;
+
 static sim7020_socket_t sim7020_sockets[SIM7020_MAX_SOCKETS];
 
-mutex_t sim7020_lock = MUTEX_INIT;
+mutex_t sim7020_lock = MUTEX_INIT_LOCKED;
 #define P(...) 
 #define SIM_LOCK() {P("LOCK %d: 0x%x\n", __LINE__, sim7020_lock.queue.next); mutex_lock(&sim7020_lock);}
 #define SIM_UNLOCK() {P("UNLOCK %d\n", __LINE__); mutex_unlock(&sim7020_lock);}
@@ -60,14 +63,15 @@ static char sim7020_stack[THREAD_STACKSIZE_DEFAULT + AT_BUF_SIZE];
 #define SIM7020_PRIO         (THREAD_PRIORITY_MAIN + 1)
 static kernel_pid_t sim7020_pid = KERNEL_PID_UNDEF;
 
+static int _sock_close(uint8_t sockid);
 static void *sim7020_thread(void *);
 
-int sim7020_init(uint8_t uart, uint32_t baudrate) {
+int sim7020_init(void) {
 
-    int res = at_dev_init(&at_dev, UART_DEV(uart), baudrate, buf, sizeof(buf));
+    int res = at_dev_init(&at_dev, SIM7020_UART_DEV, SIM7020_BAUDRATE, buf, sizeof(buf));
 
     if (res != UART_OK) {
-        printf("Error initialising AT dev %d speed %d\n", uart, baudrate);
+        printf("Error initialising AT dev %d speed %d\n", SIM7020_UART_DEV, SIM7020_BAUDRATE);
         return res;
     }
     if (pid_is_valid(sim7020_pid)) {
@@ -84,20 +88,19 @@ int sim7020_init(uint8_t uart, uint32_t baudrate) {
     return 0;
 }
 
+/*
+ * Module initialisation -- must be called with module mutex locked 
+ */
 static int _module_init(void) {
     int res;
-    SIM_LOCK();
     res = at_send_cmd_wait_ok(&at_dev, "AT+RESET", 5000000);
     /* Ignore */
     res = at_send_cmd_wait_ok(&at_dev, "AT", 5000000);
-    SIM_UNLOCK();
     if (res < 0) {
         printf("AT fail\n");
         return res;
     }
-    SIM_LOCK();
     res = at_send_cmd_wait_ok(&at_dev, "AT+CPSMS=0", 5000000);
-    SIM_UNLOCK();
     if (res < 0)
         printf("CPSMS fail\n");      
 
@@ -106,7 +109,6 @@ static int _module_init(void) {
     //res = at_send_cmd_wait_ok(&at_dev, "AT+CBAND=20", 5000000);
 
     /* Receive data as hex string */
-    SIM_LOCK();
     res = at_send_cmd_wait_ok(&at_dev, "AT+CSORCVFLAG=0", 5000000);
 #ifdef SIM7020_RECVHEX
     /* Receive data as hex string */
@@ -121,15 +123,17 @@ static int _module_init(void) {
 
     /* Signal Quality Report */
     res = at_send_cmd_get_resp(&at_dev, "AT+CSQ", resp, sizeof(resp), 10*1000000);
-    SIM_UNLOCK();
     uint8_t i;
     for (i = 0; i < SIM7020_MAX_SOCKETS; i++) {
-        sim7020_close(i);
+        _sock_close(i);
     }
     status.state = AT_RADIO_STATE_IDLE;
     return res;
 }
 
+/*
+ * Register with operator -- must be called with module mutex locked 
+ */
 /* Operator MCCMNC (mobile country code and mobile network code) */
 /* Telia */
 #define OPERATOR "24001"
@@ -143,9 +147,7 @@ int sim7020_register(void) {
 
     while (0) {
         /* Request list of network operators */
-        SIM_LOCK();
         res = at_send_cmd_get_resp(&at_dev, "AT+COPS=?", resp, sizeof(resp), 120*1000000);
-        SIM_UNLOCK();
         if (res > 0) {
             if (strncmp(resp, "+COPS", strlen("+COPS")) == 0)
                 break;
@@ -157,14 +159,10 @@ int sim7020_register(void) {
     while (1) {
 
         if (count++ % 8 == 0) {
-            SIM_LOCK();
             res =at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"" OPERATOR "\"", 240*1000000);
-            SIM_UNLOCK();
         }
       
-            SIM_LOCK();
             res = at_send_cmd_get_resp(&at_dev, "AT+CREG?", resp, sizeof(resp), 120*1000000);
-            SIM_UNLOCK();
         if (res > 0) {
             uint8_t creg;
 
@@ -183,13 +181,15 @@ int sim7020_register(void) {
     return 1;
 }
 
+/*
+ * Activate data connection -- must be called with module mutex locked 
+ */
+
 int sim7020_activate(void) {
     int res;
     uint8_t attempts = 3;
   
-    SIM_LOCK();
     res = at_send_cmd_get_resp(&at_dev,"AT+CSTT?", resp, sizeof(resp), 120*1000000);
-    SIM_UNLOCK();
     if (res > 0) {
         /* Already activated? */
         if (strncmp("+CSTT: \"\"", resp, sizeof("+CSTT: \"\"")-1) != 0) {
@@ -199,15 +199,11 @@ int sim7020_activate(void) {
     }
     /* Start Task and Set APN, USER NAME, PASSWORD */
     //res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"lpwa.telia.iot\",\"\",\"\"", resp, sizeof(resp), 120*1000000);
-    SIM_LOCK();
     res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"" APN "\",\"\",\"\"", resp, sizeof(resp), 120*1000000);  
-    SIM_UNLOCK();
     while (attempts--) {
         /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
         printf("Bringing up wireless, be patient\n");
-        SIM_LOCK();
         res = at_send_cmd_wait_ok(&at_dev, "AT+CIICR", 600*1000000);
-        SIM_UNLOCK();
         if (res == 0) {
             status.state = AT_RADIO_STATE_ACTIVE;
             break;
@@ -279,7 +275,7 @@ int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_c
     return res;
 }
 
-int sim7020_close(uint8_t sockid) {
+static int _sock_close(uint8_t sockid) {
 
     int res;
     char cmd[64];
@@ -289,11 +285,18 @@ int sim7020_close(uint8_t sockid) {
     sock->recv_callback = NULL;
 
     sprintf(cmd, "AT+CSOCL=%d", sockid);
-    SIM_LOCK();
     res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
+    return res;
+}
+
+int sim7020_close(uint8_t sockid) {
+
+    SIM_LOCK();
+    int res = _sock_close(sockid);
     SIM_UNLOCK();
     return res;
 }
+
 
 int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
 
@@ -409,6 +412,7 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
     res = at_expect_bytes(&at_dev, "> ", 10*1000000);
     if (res != 0) {
         printf("No send prompt\n");
+        netstats.tx_failed++;
         goto out;
     }
     if (res == 0) {
@@ -418,10 +422,14 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
             res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
             if (res < 0) {
                 printf("Timeout waiting for DATA ACCEPT confirmation\n");
+                netstats.tx_failed++;
                 goto out;
             }
             if (1 == (sscanf(resp, "DATA ACCEPT: %d", &nsent))) {
                 res = nsent;
+                netstats.tx_success++;
+                netstats.tx_unicast_count++;
+                netstats.tx_bytes += datalen;
                 goto out;
             }
         }
@@ -476,6 +484,8 @@ static void _recv_cb(void *arg, const char *code) {
         else {
             printf("sockid %d: no callback\n", sockid);
         }
+        netstats.rx_count++;
+        netstats.rx_bytes += rcvlen;
     }
     else
         printf("recv_cb res %d\n", res);
@@ -515,6 +525,8 @@ again:
     case AT_RADIO_STATE_REGISTERED:
         printf("***activate:\n");
         sim7020_activate();
+        if (status.state == AT_RADIO_STATE_ACTIVE)
+            SIM_UNLOCK();
         goto again;
     case AT_RADIO_STATE_ACTIVE:
         printf("***recv loop:\n");
