@@ -6,7 +6,7 @@
 #endif
 
 #ifndef SIM7020_BAUDRATE
-#define SIM7020_BAUDRATE 9600
+#define SIM7020_BAUDRATE 57200
 #endif
 
 #ifndef AT_RADIO_MAX_RECV_LEN
@@ -30,5 +30,7 @@ int sim7020_connect(const uint8_t sockid, const sock_udp_ep_t *remote);
 int sim7020_bind(const uint8_t sockid, const sock_udp_ep_t *remote);
 int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen);
 void *sim7020_recv_thread(void *arg);
+int sim7020_resolve(const char *domain, char *result);
 int sim7020_test(uint8_t sockid, int count);
+
 #endif /* SIM7020_H */
