@@ -20,6 +20,7 @@
 
 #include "at.h"
 #include "xtimer.h"
+#include "cond.h"
 #include "periph/uart.h"
 
 #include "net/sim7020.h"
@@ -127,6 +128,7 @@ static int _module_init(void) {
     for (i = 0; i < SIM7020_MAX_SOCKETS; i++) {
         _sock_close(i);
     }
+    res = at_send_cmd_wait_ok(&at_dev, "AT+IPR?", 5000000);
     status.state = AT_RADIO_STATE_IDLE;
     return res;
 }
@@ -318,10 +320,6 @@ int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
         return -EINVAL;
     }
 
-    printf("Connectiing to ipv6 mapped ");
-    ipv6_addr_print((ipv6_addr_t *) &remote->addr.ipv6);
-    printf(":%d\n", remote->port);
-
     char *c = cmd;
     int len = sizeof(cmd);
     int n = snprintf(c, len, "AT+CSOCON=%d,%d,", sockid, remote->port);
@@ -440,6 +438,87 @@ out:
     return res;
 }
 
+
+#if 1
+static mutex_t resolve_mutex;
+static cond_t resolve_cond;
+static mutex_t resolve_cond_mutex;
+static enum {
+    R_WAIT, R_DONE, R_TIMEOUT, R_ERROR
+} resolve_state;
+
+/*
+ * URC callback for a response like: +CDNSGIP: 1,"lab-pc.ssvl.kth.se","192.16.125.232" 
+ * Argument arg is pointer to char buffer where lookup result should be stored. 
+ */
+static void _resolve_urc_cb(void *arg, const char *code) {
+    char *result = arg;
+    const char *resp = code;
+
+    mutex_lock(&resolve_cond_mutex);
+    if (1 == sscanf(resp, "+CDNSGIP: %*d,\"%*[^\"]\",\"%[^\"]", result)) {
+        resolve_state = R_DONE;
+    }
+    else {
+        resolve_state = R_ERROR;
+    }
+    cond_signal(&resolve_cond);
+    mutex_unlock(&resolve_cond_mutex);
+}
+
+static void _resolve_timeout_cb(void *arg)
+{
+    (void) arg;
+    mutex_lock(&resolve_cond_mutex);
+    printf("resolve timeout\n");
+    resolve_state = R_TIMEOUT;
+    cond_signal(&resolve_cond);
+    mutex_unlock(&resolve_cond_mutex);
+}
+
+int sim7020_resolve(const char *domain, char *result) {
+    static at_urc_t urc;
+    xtimer_t timeout_timer;
+    int res;
+    
+    /* Only one at a time */
+    mutex_lock(&resolve_mutex); 
+    resolve_state = R_WAIT;
+    urc.cb = _resolve_urc_cb;
+    urc.code = "+CDNSGIP:";
+    urc.arg = result;
+    at_add_urc(&at_dev, &urc);
+    
+    timeout_timer.callback = _resolve_timeout_cb;
+    xtimer_set(&timeout_timer, 10*1000000U);
+
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "AT+CDNSGIP=%s", domain);
+    SIM_LOCK();
+    res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
+    SIM_UNLOCK();
+    if (res < 0)
+        goto out;
+
+    mutex_lock(&resolve_cond_mutex);
+    while (resolve_state == R_WAIT)
+        cond_wait(&resolve_cond, &resolve_cond_mutex);
+    if (resolve_state != R_TIMEOUT)
+        xtimer_remove(&timeout_timer);
+
+    if (resolve_state != R_DONE)
+        res = -1;
+    else 
+        res = 0;
+
+out:
+    mutex_unlock(&resolve_cond_mutex);
+    at_remove_urc(&at_dev, &urc);
+    mutex_unlock(&resolve_mutex);
+    return res;
+}
+#endif
+
 static uint8_t recv_buf[AT_RADIO_MAX_RECV_LEN];
 
 static void _recv_cb(void *arg, const char *code) {
@@ -448,6 +527,7 @@ static void _recv_cb(void *arg, const char *code) {
     printf("recv_cb for code '%s'\n", code);
     int res = sscanf(code, "+CSONMI: %d,%d,", &sockid, &len);
     if (res == 2) {
+
         /* Data is encoded as hex string, so
          * data length is half the string length */ 
 
@@ -541,16 +621,12 @@ int sim7020_active(void) {
 }
 
 int sim7020_test(uint8_t sockid, int count) {
-    static char testbuf[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVXYZ";
-  
-    while (count > 0) {
-        for (unsigned int i = 1; i < sizeof(testbuf) && count > 0; i++) {
-            if (sim7020_send(sockid, (uint8_t *) testbuf, i) < 0)
-                return -1;
-            xtimer_sleep(3);
-            if (count > 0)
-                count--;
-        }
-    }
+    (void) sockid;
+    (void) count;
+    char buf[64];
+    int res = sim7020_resolve("lab-pc.ssvl.kth.se", buf);
+    
+    if (res == 0)
+        printf("Resolve: %s\n", buf);
     return 0;
 }
