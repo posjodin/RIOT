@@ -139,6 +139,7 @@ int sock_udp_get_remote(sock_udp_t *sock, sock_udp_ep_t *ep)
     return -ENOTCONN;
 }
 
+
 int sock_udp_recv(sock_udp_t *sock, void *data, size_t max_len,
                   uint32_t timeout, sock_udp_ep_t *remote)
 {
@@ -168,12 +169,16 @@ int sock_udp_recv(sock_udp_t *sock, void *data, size_t max_len,
     }
     switch (msg.type) {
     case _MSG_TYPE_CLOSE:
+        if (timeout != 0 && timeout != SOCK_NO_TIMEOUT)
+            xtimer_remove(&timeout_timer);
         res = -EADDRNOTAVAIL;
         break;
     case _MSG_TYPE_TIMEOUT:
         res = -ETIMEDOUT;
         break;
     case _MSG_TYPE_RCV:
+        if (timeout != 0 && timeout != SOCK_NO_TIMEOUT)
+            xtimer_remove(&timeout_timer);
         mutex_lock(&sock->mutex);
         if (max_len < sock->recv_info.datalen) {
             res = -ENOBUFS;
@@ -191,10 +196,10 @@ int sock_udp_recv(sock_udp_t *sock, void *data, size_t max_len,
         mutex_unlock(&sock->mutex);
         break;
     default:
-        printf("Bad mst type %d\n", msg.type);
+        printf("sock_udp_recv: Bad msg type %d\n", msg.type);
     }
     atomic_fetch_sub(&sock->receivers, 1);
-    printf("sock_udp_recv -> %d\n", res);
+    printf("sock_udp_recv[%d:%s] -> %d\n", thread_get_active()->pid, thread_getname(thread_get_active()->pid), res);
     return res;
 }
 
