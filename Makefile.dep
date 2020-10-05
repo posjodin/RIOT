@@ -1133,4 +1133,9 @@ endif
 
 ifneq (,$(filter sim7020_%, $(USEMODULE)))
   USEMODULE += sim7020
+  USEMODULE += sim7020_ipv6
+  USEMODULE += ipv6_addr
+  USEMODULE += ipv4_addr
+  USEMODULE += at
+  USEMODULE += at_urc
 endif
