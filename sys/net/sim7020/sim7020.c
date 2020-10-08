@@ -24,6 +24,7 @@
 #include "periph/uart.h"
 
 #include "net/sim7020.h"
+#include "sim7020_powerkey.h"
 
 #define SIM7020_RECVHEX
 
@@ -69,7 +70,7 @@ static void *sim7020_thread(void *);
 
 int sim7020_init(void) {
 
-    (void) _init_gpio();
+    sim7020_powerkey_init();
     sim7020_power_on();
     int res = at_dev_init(&at_dev, SIM7020_UART_DEV, SIM7020_BAUDRATE, buf, sizeof(buf));
 
