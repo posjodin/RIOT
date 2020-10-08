@@ -69,6 +69,8 @@ static void *sim7020_thread(void *);
 
 int sim7020_init(void) {
 
+    (void) _init_gpio();
+    sim7020_power_on();
     int res = at_dev_init(&at_dev, SIM7020_UART_DEV, SIM7020_BAUDRATE, buf, sizeof(buf));
 
     if (res != UART_OK) {
@@ -438,8 +440,6 @@ out:
     return res;
 }
 
-
-#if 1
 static mutex_t resolve_mutex;
 static cond_t resolve_cond;
 static mutex_t resolve_cond_mutex;
@@ -517,14 +517,13 @@ out:
     mutex_unlock(&resolve_mutex);
     return res;
 }
-#endif
 
 static uint8_t recv_buf[AT_RADIO_MAX_RECV_LEN];
 
 static void _recv_cb(void *arg, const char *code) {
     (void) arg;
     int sockid, len;
-    printf("recv_cb for code '%s'\n", code);
+
     int res = sscanf(code, "+CSONMI: %d,%d,", &sockid, &len);
     if (res == 2) {
 
