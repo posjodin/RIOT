@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "periph/gpio.h"
 #include "xtimer.h"
-#include "sim7020_powerkey.h"
+#include "net/sim7020_powerkey.h"
 
 static gpio_t sim7020_pin = SIM7020_POWERKEY_GPIO;
 
