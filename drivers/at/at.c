@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "at.h"
 #include "fmt.h"
@@ -30,6 +31,20 @@
 #elif defined(MODULE_AT_URC_ISR_HIGH)
 #define AT_EVENT_PRIO EVENT_PRIO_HIGH
 #endif
+
+#define print _printprintable
+static void _printprintable(char *str, int n) {
+    char *c = str;
+    int i;
+    for (i = 0; i < n; i++, c++) {
+        if (isprint(*c))
+            putchar(*c);
+        else if (*c == '\n' || *c == '\r')
+            putchar(*c);
+        else
+            printf("x%02x", *c);
+    }
+}
 
 #if defined(MODULE_AT_URC_ISR)
 static void _event_process_urc(event_t *_event)
