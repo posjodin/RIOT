@@ -24,9 +24,9 @@
 #include "periph/uart.h"
 
 #include "net/sim7020.h"
-#include "sim7020_powerkey.h"
+#include "net/sim7020_powerkey.h"
 
-#define SIM7020_RECVHEX
+//#define SIM7020_RECVHEX
 
 static at_dev_t at_dev;
 static char buf[256];
@@ -528,21 +528,36 @@ static void _recv_cb(void *arg, const char *code) {
     int res = sscanf(code, "+CSONMI: %d,%d,", &sockid, &len);
     if (res == 2) {
 
+#ifdef SIM7020_RECVHEX
+
         /* Data is encoded as hex string, so
          * data length is half the string length */ 
-
         int rcvlen = len >> 1;
-
         if (rcvlen >  AT_RADIO_MAX_RECV_LEN)
             return; /* Too large */
+
         /* Find first char after second comma */
         char *ptr = strchr(strchr(code, ',')+1, ',')+1;
-    
+
+        /* Copy into receive buffer */
         for (int i = 0; i < rcvlen; i++) {
             char hexstr[3];
             hexstr[0] = *ptr++; hexstr[1] = *ptr++; hexstr[2] = '\0';
             recv_buf[i] = (uint8_t) strtoul(hexstr, NULL, 16);
         }
+#else
+        /* Data is binary */
+        int rcvlen = len;
+        if (rcvlen >  AT_RADIO_MAX_RECV_LEN)
+            return; /* Too large */
+
+        /* Find first char after second comma */
+        char *ptr = strchr(strchr(code, ',')+1, ',')+1;
+
+        /* Copy into receive buffer */
+        memcpy(recv_buf, ptr, rcvlen);
+#endif /* SIM7020_RECVHEX */
+
 #if 0
         for (int i = 0; i < rcvlen; i++) {
             if (isprint(recv_buf[i]))
