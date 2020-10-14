@@ -296,7 +296,10 @@ int emcute_discon(void)
     tbuf[0] = 2;
     tbuf[1] = DISCONNECT;
 
-    return syncsend(DISCONNECT, 2, true);
+    int res = syncsend(DISCONNECT, 2, true);
+    if (res == EMCUTE_TIMEOUT)
+        gateway.port = 0;
+    return res;
 }
 
 int emcute_reg(emcute_topic_t *topic)
