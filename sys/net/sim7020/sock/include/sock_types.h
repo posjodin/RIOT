@@ -38,8 +38,9 @@ extern "C" {
  */
 struct sock_udp {
     uint8_t sim7020_socket_id;          /**< sim7020 socket id */
-    uint8_t sim7020_connected;          /**< Connect command issued? */
-  void (*recv_callback)(sock_udp_t *sock, const uint8_t *data, uint16_t datalen);
+    sock_udp_ep_t local;		/**< local endpoint address */
+    sock_udp_ep_t remote;		/**< remote endpoint address */
+    void (*recv_callback)(sock_udp_t *sock, const uint8_t *data, uint16_t datalen);
     mutex_t mutex;                      /**< mutex for the connection */
     mbox_t mbox;                        /**< mbox for receiving */
     msg_t mbox_queue[SOCK_MBOX_SIZE];   /**< queue for mbox */

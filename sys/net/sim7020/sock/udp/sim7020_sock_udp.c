@@ -21,6 +21,7 @@
 #include "net/af.h"
 #include "net/sock/udp.h"
 #include "net/ipv6/hdr.h"
+#include "net/iana/portrange.h"
 #include "sched.h"
 #include "xtimer.h"
 
@@ -41,6 +42,15 @@ static void _input_callback(void *p,
 typedef void (* udp_socket_input_callback_t)(sock_udp_t *c,
                             const uint8_t *data, uint16_t datalen);
 
+#define STARTPORT 
+uint16_t get_dyn_port(void) {
+    static uint16_t index = 0;
+    uint16_t portno = index + IANA_DYNAMIC_PORTRANGE_MIN;
+    index = (index + 1) % (IANA_DYNAMIC_PORTRANGE_MAX - IANA_DYNAMIC_PORTRANGE_MIN + 1);
+    printf("Alloc dyn port %d\n", portno);
+    return portno;
+}
+
 static void _ep_print(const sock_udp_ep_t *ep) {
     if (ep == NULL) {
         printf("<none>");
@@ -58,18 +68,35 @@ static int _reg(sock_udp_t *sock,
         ((remote != NULL) && (remote->family != AF_INET6))) {
         return -EAFNOSUPPORT;
     }
-    int res = sim7020_udp_socket(_input_callback, sock);
+    if (local != NULL) {
+        sock->local = *local;
+        sock->local.port += 40000;
+    }
+    else {
+        sock_udp_ep_t sock_any = SOCK_IPV6_EP_ANY;
+        sock->local =  sock_any;
+        sock->local.port = get_dyn_port();
+    }
+    if (remote != NULL) 
+        sock->remote = *remote;
+    else {
+        sock_udp_ep_t sock_any = SOCK_IPV6_EP_ANY;
+        sock->remote = sock_any;
+    }
+    
+        int res = sim7020_udp_socket(_input_callback, sock);
     if (res < 0) {
-        printf("_reg failed %d\n", res);
         return res;
     }
     sock->sim7020_socket_id = res;
 
     if (local != NULL) {
-        if ((res = sim7020_bind(sock->sim7020_socket_id, local)) < 0) {
+#if 1
+        if ((res = sim7020_bind(sock->sim7020_socket_id, &sock->local)) < 0) {
             sock_udp_close(sock);
             return res;
         }
+#endif
     }
     if (remote != NULL) {
         if ((res = sim7020_connect(sock->sim7020_socket_id, remote)) < 0) {
@@ -210,6 +237,7 @@ int sock_udp_send(sock_udp_t *sock, const void *data, size_t len,
     assert((len == 0) || (data != NULL));   /* (len != 0) => (data != NULL) */
 
     int sockid = sock->sim7020_socket_id;
+    //sim7020_bind(sockid, &sock->local);
     if (remote != NULL) {
         sim7020_connect(sockid, remote);
     }

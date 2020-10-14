@@ -16,7 +16,6 @@
 #include "net/ipv4/addr.h"
 #include "net/ipv6/addr.h"
 #include "net/sock/udp.h"
-#include "net/netstats.h"
 
 #include "at.h"
 #include "xtimer.h"
@@ -26,7 +25,7 @@
 #include "net/sim7020.h"
 #include "net/sim7020_powerkey.h"
 
-//#define SIM7020_RECVHEX
+#define SIM7020_RECVHEX
 
 static at_dev_t at_dev;
 static char buf[256];
@@ -48,7 +47,7 @@ struct sock_sim7020 {
 };
 typedef struct sock_sim7020 sim7020_socket_t;
 
-static netstats_t netstats;
+static sim7020_netstats_t netstats;
 
 static sim7020_socket_t sim7020_sockets[SIM7020_MAX_SOCKETS];
 
@@ -68,16 +67,19 @@ static kernel_pid_t sim7020_pid = KERNEL_PID_UNDEF;
 static int _sock_close(uint8_t sockid);
 static void *sim7020_thread(void *);
 
+sim7020_netstats_t *sim7020_get_netstats(void) {
+    return &netstats;
+}
+
 int sim7020_init(void) {
 
     sim7020_powerkey_init();
-    sim7020_power_on();
     int res = at_dev_init(&at_dev, SIM7020_UART_DEV, SIM7020_BAUDRATE, buf, sizeof(buf));
-
     if (res != UART_OK) {
         printf("Error initialising AT dev %d speed %d\n", SIM7020_UART_DEV, SIM7020_BAUDRATE);
         return res;
     }
+    
     if (pid_is_valid(sim7020_pid)) {
         printf("sim7020 thread already running\n");
     }
@@ -92,28 +94,62 @@ int sim7020_init(void) {
     return 0;
 }
 
+/* Activation timer to keep track of how long we have been
+ * trying to activate the uplink 
+ */
+static uint8_t _acttimer_expired_flag = 0;
+static void _acttimer_cb(void *arg) {
+    (void) arg;
+    printf("ACTTIMER EXPIRED\n");
+    _acttimer_expired_flag = 1;
+}
+
+static xtimer_t _acttimer = {.callback = _acttimer_cb, .arg = NULL};
+
+static void _acttimer_start(void) {
+    _acttimer_expired_flag = 0;
+    printf("ACTTIMER START\n");
+    xtimer_set(&_acttimer, 300*1000000);
+}
+
+static int _acttimer_expired(void) {
+    return _acttimer_expired_flag != 0;
+}
+
+/*
+ * Reset module by powering it off 
+ */
+static void _module_reset(void) {
+    sim7020_power_off();    
+    netstats.reset_count++;
+    status.state = AT_RADIO_STATE_NONE;
+}
+
 /*
  * Module initialisation -- must be called with module mutex locked 
  */
 static int _module_init(void) {
+    sim7020_power_on();
+    at_dev_poweron(&at_dev);
+
     int res;
     res = at_send_cmd_wait_ok(&at_dev, "AT+RESET", 5000000);
     /* Ignore */
     res = at_send_cmd_wait_ok(&at_dev, "AT", 5000000);
     if (res < 0) {
+        netstats.commfail_count++;
         printf("AT fail\n");
         return res;
     }
     res = at_send_cmd_wait_ok(&at_dev, "AT+CPSMS=0", 5000000);
-    if (res < 0)
+    if (res < 0) {
         printf("CPSMS fail\n");      
-
+        netstats.commfail_count++;
+    }
     /* Limit bands to speed up roaming */
     /* WIP needs a generic solution */
     //res = at_send_cmd_wait_ok(&at_dev, "AT+CBAND=20", 5000000);
 
-    /* Receive data as hex string */
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CSORCVFLAG=0", 5000000);
 #ifdef SIM7020_RECVHEX
     /* Receive data as hex string */
     res = at_send_cmd_wait_ok(&at_dev, "AT+CSORCVFLAG=0", 5000000);
@@ -121,12 +157,15 @@ static int _module_init(void) {
     /* Receive binary data */
     res = at_send_cmd_wait_ok(&at_dev, "AT+CSORCVFLAG=1", 5000000);
 #endif /* SIM7020_RECVHEX */
-
+    if (res < 0)
+        netstats.commfail_count++;
     //Telia is 24001
     //res = at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"24002\"", 5000000);
 
     /* Signal Quality Report */
     res = at_send_cmd_get_resp(&at_dev, "AT+CSQ", resp, sizeof(resp), 10*1000000);
+
+    /* Wipe any open sockets */
     uint8_t i;
     for (i = 0; i < SIM7020_MAX_SOCKETS; i++) {
         _sock_close(i);
@@ -161,13 +200,16 @@ int sim7020_register(void) {
     }
 
     int count = 0;
-    while (1) {
+    while (!_acttimer_expired()) {
 
         if (count++ % 8 == 0) {
             res =at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"" OPERATOR "\"", 240*1000000);
+            if (res < 0)
+                netstats.commfail_count++;
+                
         }
       
-            res = at_send_cmd_get_resp(&at_dev, "AT+CREG?", resp, sizeof(resp), 120*1000000);
+        res = at_send_cmd_get_resp(&at_dev, "AT+CREG?", resp, sizeof(resp), 120*1000000);
         if (res > 0) {
             uint8_t creg;
 
@@ -179,10 +221,15 @@ int sim7020_register(void) {
                 }
             }
         }
+        else
+            netstats.commfail_count++;
         xtimer_sleep(5);
 
     }
-
+    if (_acttimer_expired()) {
+        netstats.activation_fail_count++;
+        printf("timer expired during activatiion\n");
+    }
     return 1;
 }
 
@@ -202,9 +249,14 @@ int sim7020_activate(void) {
             return 0;
         }
     }
+    else
+        netstats.commfail_count++;
+        
     /* Start Task and Set APN, USER NAME, PASSWORD */
     //res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"lpwa.telia.iot\",\"\",\"\"", resp, sizeof(resp), 120*1000000);
     res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"" APN "\",\"\",\"\"", resp, sizeof(resp), 120*1000000);  
+    if (res < 0)
+        netstats.commfail_count++;
     while (attempts--) {
         /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
         printf("Bringing up wireless, be patient\n");
@@ -213,6 +265,8 @@ int sim7020_activate(void) {
             status.state = AT_RADIO_STATE_ACTIVE;
             break;
         }
+        else
+            netstats.commfail_count++;            
         xtimer_sleep(8);
     }
     return res;
@@ -267,15 +321,19 @@ int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_c
             sim7020_socket_t *sock = &sim7020_sockets[sockid];
             sock->recv_callback = recv_callback;
             sock->recv_callback_arg = recv_callback_arg;
-            printf("CSOC = %d\n", sockid);
             return sockid;
         }
-        else
-            printf("Parse error: '%s'\n", resp);
+        else {
+            if (strcmp("ERROR", resp) == 0)
+                return -ENOMEM;
+            printf("CSOC parse error: '%s'\n", resp);
+        }
     }
     else {
         printf("CSOC failed: %d\n", res);
+        netstats.commfail_count++;
         at_drain(&at_dev);
+        _module_reset();
     }        
     return res;
 }
@@ -339,16 +397,17 @@ int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
     /* Create a socket: IPv4, UDP, 1 */
     SIM_LOCK();
     res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
-    (void) at_send_cmd_wait_ok(&at_dev, "AT+CSOCON?", 120*1000000);    
     SIM_UNLOCK();
-    printf("socket connected: %d\n", res);
+    if (res < 0) {
+        netstats.commfail_count++;
+        _module_reset();
+    }
     return res;
 }
 
 int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
 
     assert(sockid < SIM7020_MAX_SOCKETS);
-
     if (local->family != AF_INET6) {
         return -EAFNOSUPPORT;
     }
@@ -356,17 +415,16 @@ int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
     if (local->port == 0) {
         return -EINVAL;
     }
-
 #if SIM7020_BIND_ENABLE
     printf("binding to to ipv6 mapped ");
     ipv6_addr_print((ipv6_addr_t *) &local->addr.ipv6);
-    printf(":%d\n", local->port);
+    printf(":%u\n", local->port);
 
     int res;
     char cmd[64];
     char *c = cmd;
     int len = sizeof(cmd);
-    int n = snprintf(c, len, "AT+CSOB=%d,%d", sockid, local->port);
+    int n = snprintf(c, len, "AT+CSOB=%d,%u", sockid, local->port);
 
     c += n; len -= n;
     if (!ipv6_addr_is_unspecified((ipv6_addr_t *) &local->addr.ipv6)) {
@@ -388,8 +446,11 @@ int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
 
     res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
     (void) at_send_cmd_wait_ok(&at_dev, "AT+CSOCON?", 120*1000000);    
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CSOB?", 120*1000000);
+
     SIM_UNLOCK();
     printf("socket bound: %d\n", res);
+    
     return res;
 #else
     (void) sockid;
@@ -412,33 +473,35 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
     res = at_send_cmd(&at_dev, cmd, 10*1000000);
     res = at_expect_bytes(&at_dev, "> ", 10*1000000);
     if (res != 0) {
-        printf("No send prompt\n");
-        netstats.tx_failed++;
+        goto fail;
+    }
+    at_send_bytes(&at_dev, (char *) data, len);
+    /* Skip empty line */
+    (void) at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
+    /* Then look for DATA ACCEPT confirmarion */
+    res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
+    if (res < 0) {
+        printf("Timeout waiting for DATA ACCEPT confirmation\n");
+        goto fail;
+    }
+    unsigned int nsent;
+    if (1 == (sscanf(resp, "DATA ACCEPT: %d", &nsent))) {
+        res = nsent;
+        netstats.tx_success++;
+        netstats.tx_unicast_count++;
+        netstats.tx_bytes += datalen;
         goto out;
     }
-    if (res == 0) {
-        at_send_bytes(&at_dev, (char *) data, len);
-        while (1) {
-            unsigned int nsent;
-            res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
-            if (res < 0) {
-                printf("Timeout waiting for DATA ACCEPT confirmation\n");
-                netstats.tx_failed++;
-                goto out;
-            }
-            if (1 == (sscanf(resp, "DATA ACCEPT: %d", &nsent))) {
-                res = nsent;
-                netstats.tx_success++;
-                netstats.tx_unicast_count++;
-                netstats.tx_bytes += datalen;
-                goto out;
-            }
-        }
-    }
-    res = 0;
+    printf("No accept: %s\n", resp);
+    /* fall through */
+fail:
+    netstats.tx_failed++;
+    netstats.commfail_count++;
+    _module_reset();
 out:
     SIM_UNLOCK();
     return res;
+
 }
 
 static mutex_t resolve_mutex;
@@ -595,8 +658,11 @@ static void _recv_loop(void) {
     urc.arg = NULL;
     at_add_urc(&at_dev, &urc);
     while (status.state == AT_RADIO_STATE_ACTIVE) {
+        static int c;
+        if ((c++ % 100) == 0)
+            printf("recv loop\n");
         SIM_LOCK();
-        at_process_urc(&at_dev, URC_POLL_MSECS*(uint32_t) 1000);
+        at_process_urc(&at_dev, URC_POLL_MSECS*(uint32_t) 0100);
         SIM_UNLOCK();
     }
     at_remove_urc(&at_dev, &urc);
@@ -605,12 +671,13 @@ static void _recv_loop(void) {
 
 static void *sim7020_thread(void *arg) {
     (void) arg;
+
 again:
     printf("again sim socket: locked 0x%x\n", sim7020_lock.queue.next);
     switch (status.state) {
-        
     case AT_RADIO_STATE_NONE:
         printf("***module init:\n");
+        _acttimer_start();
         _module_init();
         goto again;
     case AT_RADIO_STATE_IDLE:
