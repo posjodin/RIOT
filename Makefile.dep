@@ -437,6 +437,11 @@ ifneq (,$(filter gnrc_pktdump,$(USEMODULE)))
   USEMODULE += od
 endif
 
+ifneq (,$(filter rime,$(USEMODULE)))
+  DEFAULT_MODULE += auto_init_gnrc_pktdump
+  USEMODULE += gnrc_pktbuf
+endif
+
 ifneq (,$(filter od,$(USEMODULE)))
   USEMODULE += fmt
 endif
