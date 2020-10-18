@@ -26,6 +26,7 @@
 #include "net/sim7020_powerkey.h"
 
 #define SIM7020_RECVHEX
+#define TCPIPSERIALS
 
 static at_dev_t at_dev;
 static char buf[256];
@@ -151,11 +152,22 @@ static int _module_init(void) {
     //res = at_send_cmd_wait_ok(&at_dev, "AT+CBAND=20", 5000000);
 
 #ifdef SIM7020_RECVHEX
+
     /* Receive data as hex string */
+#ifdef TCPIPSERIALS
+    /* Show Data in Hex Mode of a Package Received */
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPHEXS=2", 5000000);
+#else
     res = at_send_cmd_wait_ok(&at_dev, "AT+CSORCVFLAG=0", 5000000);
+#endif /* TCPIPSERIALS */
 #else  
+#ifdef TCPIPSERIALS
+    /* Show Data in Hex Mode of a Package Received */
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPHEXS=0", 5000000);
+#else
     /* Receive binary data */
     res = at_send_cmd_wait_ok(&at_dev, "AT+CSORCVFLAG=1", 5000000);
+#endif /* TCPIPSERIALS */
 #endif /* SIM7020_RECVHEX */
     if (res < 0)
         netstats.commfail_count++;
@@ -189,30 +201,21 @@ static int _module_init(void) {
 int sim7020_register(void) {
     int res;
 
-    while (0) {
-        /* Request list of network operators */
-        res = at_send_cmd_get_resp(&at_dev, "AT+COPS=?", resp, sizeof(resp), 120*1000000);
-        if (res > 0) {
-            if (strncmp(resp, "+COPS", strlen("+COPS")) == 0)
-                break;
-        }
-        xtimer_sleep(5);
+    /* Force operator selection */
+    res =at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"" OPERATOR "\"", 240*1000000);
+    if (res < 0) {
+        netstats.commfail_count++;
+        return res;
     }
 
-    int count = 0;
     while (!_acttimer_expired()) {
-
-        if (count++ % 8 == 0) {
-            res =at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"" OPERATOR "\"", 240*1000000);
-            if (res < 0)
-                netstats.commfail_count++;
-                
-        }
-      
         res = at_send_cmd_get_resp(&at_dev, "AT+CREG?", resp, sizeof(resp), 120*1000000);
-        if (res > 0) {
+        if (res < 0) {
+            netstats.commfail_count++;
+        }
+        else {
             uint8_t creg;
-
+                
             if (1 == (sscanf(resp, "%*[^:]: %*d,%hhd", &creg))) {
                 /* Wait for 1 (Registered, home network) or 5 (Registered, roaming) */
                 if (creg == 1 || creg == 5) {
@@ -221,11 +224,20 @@ int sim7020_register(void) {
                 }
             }
         }
+        xtimer_sleep(5);
+    }
+    /* Wait for GPRS/Packet Domain attach */
+    while (!_acttimer_expired()) {
+        res = at_send_cmd_get_resp(&at_dev, "AT+CGATT?", resp, sizeof(resp), 120*1000000);
+        if (res > 0) {
+            if (0 == (strcmp(resp, "+CGATT: 1")))
+                break;
+        }
         else
             netstats.commfail_count++;
         xtimer_sleep(5);
-
     }
+
     if (_acttimer_expired()) {
         netstats.activation_fail_count++;
         printf("timer expired during activatiion\n");
@@ -239,37 +251,71 @@ int sim7020_register(void) {
 
 int sim7020_activate(void) {
     int res;
-    uint8_t attempts = 3;
+    uint8_t attempts = 10;
   
-    res = at_send_cmd_get_resp(&at_dev,"AT+CSTT?", resp, sizeof(resp), 120*1000000);
+    res = at_send_cmd_get_resp(&at_dev,"AT+CIPMUX?", resp, sizeof(resp), 120*1000000);  
     if (res > 0) {
-        /* Already activated? */
-        if (strncmp("+CSTT: \"\"", resp, sizeof("+CSTT: \"\"")-1) != 0) {
-            status.state = AT_RADIO_STATE_ACTIVE;
+        printf("CIPMUX? resp %s\n", resp);
+    }
+    else
+        printf("CIPMUX? 1 fail %d\n", res); 
+    at_drain(&at_dev);
+
+    res = at_send_cmd_get_resp(&at_dev,"AT+CIPMUX=1", resp, sizeof(resp), 120*1000000);  
+    if (res < 0) {
+        netstats.commfail_count++;
+        printf("CIPMUX=1 fail %d\n", res); 
+        return res;
+    }
+    printf("CIPMUX set %s\n", resp);
+    at_drain(&at_dev);
+
+    res = at_send_cmd_get_resp(&at_dev,"AT+CIPMUX?", resp, sizeof(resp), 120*1000000);  
+    if (res > 0) {
+        printf("CIPMUX resp %s\n", resp);
+    }
+    at_drain(&at_dev);
+
+    /* Already activated? */
+    if (strncmp("+CSTT: \"\"", resp, sizeof("+CSTT: \"\"")-1) != 0) {
+        status.state = AT_RADIO_STATE_ACTIVE;
+    }
+    else {
+        res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"" APN "\",\"\",\"\"", resp, sizeof(resp), 120*1000000);  
+        if (res < 0) {
+            netstats.commfail_count++;
+            return res;
+        }
+        while (attempts--) {
+            /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
+            printf("Bringing up wireless, be patient\n");
+            res = at_send_cmd_wait_ok(&at_dev, "AT+CIICR", 600*1000000);
+            if (res == 0) {
+                status.state = AT_RADIO_STATE_ACTIVE;
+                        break;
+            }
             return 0;
         }
     }
-    else
-        netstats.commfail_count++;
-        
-    /* Start Task and Set APN, USER NAME, PASSWORD */
-    //res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"lpwa.telia.iot\",\"\",\"\"", resp, sizeof(resp), 120*1000000);
-    res = at_send_cmd_get_resp(&at_dev,"AT+CSTT=\"" APN "\",\"\",\"\"", resp, sizeof(resp), 120*1000000);  
-    if (res < 0)
-        netstats.commfail_count++;
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPSRIP=1", 5000000);
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPHEAD=1", 5000000);
+
+#ifdef TCPIPSERIALS
     while (attempts--) {
-        /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
-        printf("Bringing up wireless, be patient\n");
-        res = at_send_cmd_wait_ok(&at_dev, "AT+CIICR", 600*1000000);
-        if (res == 0) {
-            status.state = AT_RADIO_STATE_ACTIVE;
+        /* Multi-IP Connection */
+        res = at_send_cmd_wait_ok(&at_dev, "AT+CGATT?", 5000000);
+        res = at_send_cmd_wait_ok(&at_dev, "AT+CGACT?", 5000000);                
+        res = at_send_cmd_wait_ok(&at_dev, "AT+CIPCHAN=0", 5000000);
+        res = at_send_cmd_wait_ok(&at_dev, "AT+CIPMUX=1", 5000000);            
+        if (res == 0)
             break;
-        }
-        else
-            netstats.commfail_count++;            
-        xtimer_sleep(8);
+        printf("Get resp %s\n", resp);
+        xtimer_sleep(4);
     }
-    return res;
+    if (attempts == 0)
+        return -1;
+#endif    
+    return 0;
 }
 
 int sim7020_status(void) {
@@ -305,10 +351,20 @@ int sim7020_status(void) {
     return res;
 }
 
+
 int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_callback_arg) {
     int res;
     /* Create a socket: IPv4, UDP, 1 */
 
+#ifdef TCPIPSERIALS
+    {
+        static uint8_t sockid = 0;
+        sim7020_socket_t *sock = &sim7020_sockets[sockid];
+        sock->recv_callback = recv_callback;
+        sock->recv_callback_arg = recv_callback_arg;
+        return sockid++;
+    }
+#endif
     SIM_LOCK();
     res = at_send_cmd_get_resp(&at_dev, "AT+CSOC=1,2,1", resp, sizeof(resp), 120*1000000);    
     SIM_UNLOCK();
@@ -361,6 +417,69 @@ int sim7020_close(uint8_t sockid) {
 }
 
 
+#ifdef TCPIPSERIALS
+int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
+
+    int res;
+    char cmd[64];
+
+
+    assert(sockid < SIM7020_MAX_SOCKETS);
+
+    if (remote->family != AF_INET6) {
+        return -EAFNOSUPPORT;
+    }
+    if (!ipv6_addr_is_ipv4_mapped((ipv6_addr_t *) &remote->addr.ipv6)) {
+        printf("sim7020_connect: not ipv6 mapped ipv4: ");
+        ipv6_addr_print((ipv6_addr_t *) &remote->addr.ipv6);
+        printf("\n");
+        return -1;
+    }
+    if (remote->port == 0) {
+        return -EINVAL;
+    }
+
+    SIM_LOCK();
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPMUX=1", 5000000);            
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CLPORT= 0, \"UDP\", 8000", 120*1000000);
+    //res = at_send_cmd_wait_ok(&at_dev, "AT+CLPORT= \"UDP\", 8000", 120*1000000);
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CLPORT?", 120*1000000);
+    SIM_UNLOCK();
+
+    char *c = cmd;
+    int len = sizeof(cmd);
+    int n = snprintf(c, len, "AT+CIPSTART= %u, \"UDP\", ", sockid);
+    //int n = snprintf(c, len, "AT+CIPSTART= \"UDP\", ");
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPMUX=1", 5000000);            
+    c += n; len -= n;
+    ipv6_addr_t *v6addr = (ipv6_addr_t *) &remote->addr.ipv6;
+    ipv4_addr_t *v4addr = (ipv4_addr_t *) &v6addr->u32[3];
+    if (NULL == ipv4_addr_to_str(c, v4addr, len)) {
+        printf("connect: bad IPv4 mapped address: ");
+        ipv6_addr_print((ipv6_addr_t *) &remote->addr.ipv6);
+        printf("\n");
+        return -1;
+    }
+    len -= strlen(c);
+    c += strlen(c);
+    snprintf(c, len, ", %u", remote->port);
+    /* Create a socket: IPv4, UDP, 1 */
+    SIM_LOCK();
+    res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
+    SIM_UNLOCK();
+    if (res < 0) {
+        netstats.commfail_count++;
+        _module_reset();
+    }
+    SIM_LOCK();
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPSTATUS=0", 120*1000000);
+    SIM_UNLOCK();
+
+
+    return res;
+}
+
+#else
 int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
 
     int res;
@@ -404,6 +523,7 @@ int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
     }
     return res;
 }
+#endif
 
 int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
 
@@ -463,18 +583,33 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
 
     char cmd[32];
     size_t len = datalen;
+
+    if (status.state != AT_RADIO_STATE_ACTIVE)
+        return -1;
+
     if (len > SIM7020_MAX_SEND_LEN)
         return -EINVAL;
 
     assert(sockid < SIM7020_MAX_SOCKETS);
     SIM_LOCK();
     at_drain(&at_dev);
+#ifdef TCPIPSERIALS
+    snprintf(cmd, sizeof(cmd), "AT+CIPSEND=%u,%u", sockid, len);
+    //snprintf(cmd, sizeof(cmd), "AT+CIPSEND=%u", len);
+#else
     snprintf(cmd, sizeof(cmd), "AT+CSODSEND=%d,%d", sockid, len);
+#endif
     res = at_send_cmd(&at_dev, cmd, 10*1000000);
     res = at_expect_bytes(&at_dev, "> ", 10*1000000);
     if (res != 0) {
         goto fail;
     }
+#ifdef TCPIPSERIALS
+    res = at_send_cmd_wait_ok(&at_dev, (char *) data, len);
+    if (res != 0)
+        printf("send afilae\n", res);
+    goto out;
+#else
     at_send_bytes(&at_dev, (char *) data, len);
     /* Skip empty line */
     (void) at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
@@ -494,6 +629,7 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
     }
     printf("No accept: %s\n", resp);
     /* fall through */
+#endif
 fail:
     netstats.tx_failed++;
     netstats.commfail_count++;
@@ -583,8 +719,75 @@ out:
 }
 
 static uint8_t recv_buf[AT_RADIO_MAX_RECV_LEN];
+#ifdef TCPIPSERIALS
+static void _receive_cb(void *arg, const char *code) {
+    (void) arg;
+    int sockid, len;
 
-static void _recv_cb(void *arg, const char *code) {
+    int res = sscanf(code, "+RECEIVE,%d,%d:", &sockid, &len);
+    printf("RECEIVE CB %d:  '%s'\n", res, code);
+    if (res == 2) {
+
+#ifdef SIM7020_RECVHEX
+        res = at_readline(&at_dev, (char *) recv_buf, sizeof(recv_buf), 0, 10*1000000);
+        printf("Read %d byte '%s'\n", res, recv_buf);
+        /* Data is encoded as hex string, so
+         * data length is half the string length */ 
+        int rcvlen = len >> 1;
+        if (rcvlen >  AT_RADIO_MAX_RECV_LEN)
+            return; /* Too large */
+
+        /* Find first char after second comma */
+        char *ptr = strchr(strchr(code, ',')+1, ',')+1;
+
+        /* Copy into receive buffer */
+        for (int i = 0; i < rcvlen; i++) {
+            char hexstr[3];
+            hexstr[0] = *ptr++; hexstr[1] = *ptr++; hexstr[2] = '\0';
+            recv_buf[i] = (uint8_t) strtoul(hexstr, NULL, 16);
+        }
+#else
+        /* Data is binary */
+        int rcvlen = len;
+        if (rcvlen >  AT_RADIO_MAX_RECV_LEN)
+            return; /* Too large */
+
+        /* Find first char after second comma */
+        char *ptr = strchr(strchr(code, ',')+1, ',')+1;
+
+        /* Copy into receive buffer */
+        memcpy(recv_buf, ptr, rcvlen);
+#endif /* SIM7020_RECVHEX */
+
+#if 0
+        for (int i = 0; i < rcvlen; i++) {
+            if (isprint(recv_buf[i]))
+                putchar(recv_buf[i]);
+            else
+                printf("x%02x", recv_buf[i]);
+            putchar(' ');
+        }
+        putchar('\n');
+#endif
+        if (sockid >= SIM7020_MAX_SOCKETS) {
+            printf("Illegal sim socket %d\n", sockid);
+            return;
+        }
+        sim7020_socket_t *sock = &sim7020_sockets[sockid];
+        if (sock->recv_callback != NULL) {
+            sock->recv_callback(sock->recv_callback_arg, recv_buf, rcvlen);
+        }
+        else {
+            printf("sockid %d: no callback\n", sockid);
+        }
+        netstats.rx_count++;
+        netstats.rx_bytes += rcvlen;
+    }
+    else
+        printf("csonmi_cb res %d\n", res);
+}
+#else
+static void _csonmi_cb(void *arg, const char *code) {
     (void) arg;
     int sockid, len;
 
@@ -646,15 +849,22 @@ static void _recv_cb(void *arg, const char *code) {
         netstats.rx_bytes += rcvlen;
     }
     else
-        printf("recv_cb res %d\n", res);
+        printf("csonmi_cb res %d\n", res);
 }
+
+#endif /* TCPIPSERIALS */
 
 #define URC_POLL_MSECS 1000
 static void _recv_loop(void) {
     at_urc_t urc;
 
-    urc.cb = _recv_cb;
+#ifdef TCPIPSERIALS
+    urc.cb = _receive_cb;
+    urc.code = "+RECEIVE,";
+#else
+    urc.cb = _csonmi_cb;
     urc.code = "+CSONMI:";
+#endif 
     urc.arg = NULL;
     at_add_urc(&at_dev, &urc);
     while (status.state == AT_RADIO_STATE_ACTIVE) {
