@@ -193,6 +193,25 @@ typedef union {
                                                0xff, 0x00, 0x00, 0x00 }}
 
 /**
+ * @brief   Static initializer for IPv4-mapped IPv6 addresses (::ffff/96)
+ *
+ * @see <a href="http://tools.ietf.org/html/rfc4291#section-2.5.5">
+ *          RFC 4291, section 2.5.5.2
+ *      </a>
+ */
+
+#define IPV6_ADDR_IPV4_MAPPED_PREFIX        {{ 0x00, 0x00, 0x00, 0x00, \
+                                               0x00, 0x00, 0x00, 0x00, \
+                                               0x00, 0x00, 0xff, 0xff, \
+                                               0x00, 0x00, 0x00, 0x00 }}
+
+/**
+ * @brief   Pointer to IPv4 address part in IPv4-mapped IPv6 address
+ */
+
+#define IPV4_ADDR_IPV6_MAPPED(IPV6)  ((ipv4_addr_t *) &((ipv6_addr_t *)(IPV6))->u32[3])
+
+/**
  * @name    Multicast address flags
  * @brief   Values for the flag field in multicast addresses.
  * @{
@@ -303,6 +322,11 @@ extern const ipv6_addr_t ipv6_addr_all_routers_site_local;
  * @see @ref IPV6_ADDR_SOLICITED_NODE_PREFIX
  */
 extern const ipv6_addr_t ipv6_addr_solicited_node_prefix;
+
+/**
+ * @see @ref IPV4_ADDR_IPV6_MAPPED_PREFIX
+ */
+extern const ipv6_addr_t ipv6_addr_ipv4_mapped_prefix;
 /**
  * @}
  */
