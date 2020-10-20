@@ -338,10 +338,6 @@ int sim7020_status(void) {
     return res;
 }
 
-int sim7020_at(void) {
-    return 0;
-}
-
 #ifdef TCPIPSERIALS
 static uint8_t _alloc_conn_no(void) {
     uint8_t i;
@@ -963,6 +959,14 @@ again:
 
 int sim7020_active(void) {
     return status.state == AT_RADIO_STATE_ACTIVE;
+}
+
+int sim7020_at(const char *cmd) {
+    printf("Do command '%s'\n", cmd);
+    SIM_LOCK();
+    at_send_cmd(&at_dev, cmd, 10*1000000);
+    SIM_UNLOCK();
+    return 0;
 }
 
 int sim7020_test(uint8_t sockid, int count) {
