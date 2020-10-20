@@ -22,8 +22,10 @@ static void _pw_toggle(uint32_t msecs) {
   
 void sim7020_power_on(void) {
     _pw_toggle(800);
+    xtimer_sleep(2);
 }
 
 void sim7020_power_off(void) {
     _pw_toggle(2000);
+    xtimer_sleep(2);
 }
