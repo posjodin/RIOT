@@ -27,7 +27,7 @@
 
 #define SIM7020_RECVHEX
 #define TCPIPSERIALS
-
+#define SIM7020_BIND_ENABLE
 static at_dev_t at_dev;
 static char buf[256];
 static char resp[1024];
@@ -43,6 +43,10 @@ static struct at_radio_status {
 
 struct sock_sim7020 {
     uint8_t sockid;
+    uint8_t flags;
+#define MODULE_OOS 1     /* Module state out of sync with socket state */
+    sock_udp_ep_t local;
+    sock_udp_ep_t remote;
     sim7020_recv_callback_t recv_callback;
     void *recv_callback_arg;
 };
@@ -75,6 +79,7 @@ sim7020_netstats_t *sim7020_get_netstats(void) {
 int sim7020_init(void) {
 
     sim7020_powerkey_init();
+    sim7020_power_off();    
     int res = at_dev_init(&at_dev, SIM7020_UART_DEV, SIM7020_BAUDRATE, buf, sizeof(buf));
     if (res != UART_OK) {
         printf("Error initialising AT dev %d speed %d\n", SIM7020_UART_DEV, SIM7020_BAUDRATE);
@@ -111,6 +116,11 @@ static void _acttimer_start(void) {
     _acttimer_expired_flag = 0;
     printf("ACTTIMER START\n");
     xtimer_set(&_acttimer, 300*1000000);
+}
+
+static void _acttimer_stop(void) {
+    _acttimer_expired_flag = 0;
+    xtimer_remove(&_acttimer);
 }
 
 static int _acttimer_expired(void) {
@@ -253,31 +263,23 @@ int sim7020_activate(void) {
     int res;
     uint8_t attempts = 10;
   
+#if 1
     res = at_send_cmd_get_resp(&at_dev,"AT+CIPMUX?", resp, sizeof(resp), 120*1000000);  
-    if (res > 0) {
-        printf("CIPMUX? resp %s\n", resp);
-    }
-    else
-        printf("CIPMUX? 1 fail %d\n", res); 
+    if (res < 0)
+        return res;
     at_drain(&at_dev);
-
-    res = at_send_cmd_get_resp(&at_dev,"AT+CIPMUX=1", resp, sizeof(resp), 120*1000000);  
+    if (strcmp(resp, "+CIPMUX: 1") != 0)
+        res = at_send_cmd_wait_ok(&at_dev,"AT+CIPMUX=1", 120*1000000);
     if (res < 0) {
         netstats.commfail_count++;
         printf("CIPMUX=1 fail %d\n", res); 
         return res;
     }
-    printf("CIPMUX set %s\n", resp);
     at_drain(&at_dev);
-
-    res = at_send_cmd_get_resp(&at_dev,"AT+CIPMUX?", resp, sizeof(resp), 120*1000000);  
-    if (res > 0) {
-        printf("CIPMUX resp %s\n", resp);
-    }
-    at_drain(&at_dev);
-
+#endif
+    res = at_send_cmd_get_resp(&at_dev,"AT+CSTT?", resp, sizeof(resp), 60*1000000);
     /* Already activated? */
-    if (strncmp("+CSTT: \"\"", resp, sizeof("+CSTT: \"\"")-1) != 0) {
+    if (res > 0 && strncmp("+CSTT: \"\"", resp, sizeof("+CSTT: \"\"")-1) != 0) {
         status.state = AT_RADIO_STATE_ACTIVE;
     }
     else {
@@ -286,35 +288,20 @@ int sim7020_activate(void) {
             netstats.commfail_count++;
             return res;
         }
-        while (attempts--) {
-            /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
-            printf("Bringing up wireless, be patient\n");
-            res = at_send_cmd_wait_ok(&at_dev, "AT+CIICR", 600*1000000);
-            if (res == 0) {
-                status.state = AT_RADIO_STATE_ACTIVE;
-                        break;
-            }
-            return 0;
-        }
     }
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPSRIP=1", 5000000);
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPHEAD=1", 5000000);
-
-#ifdef TCPIPSERIALS
+    at_drain(&at_dev);
     while (attempts--) {
-        /* Multi-IP Connection */
-        res = at_send_cmd_wait_ok(&at_dev, "AT+CGATT?", 5000000);
-        res = at_send_cmd_wait_ok(&at_dev, "AT+CGACT?", 5000000);                
-        res = at_send_cmd_wait_ok(&at_dev, "AT+CIPCHAN=0", 5000000);
-        res = at_send_cmd_wait_ok(&at_dev, "AT+CIPMUX=1", 5000000);            
-        if (res == 0)
-            break;
-        printf("Get resp %s\n", resp);
-        xtimer_sleep(4);
+      /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
+      printf("Bringing up wireless, be patient\n");
+      res = at_send_cmd_wait_ok(&at_dev, "AT+CIICR", 600*1000000);
+      if (res == 0) {
+        status.state = AT_RADIO_STATE_ACTIVE;
+        break;
+      }
     }
-    if (attempts == 0)
-        return -1;
-#endif    
+    /* Show remote address and port on receive */
+    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPSRIP=1", 5000000);
+
     return 0;
 }
 
@@ -351,20 +338,38 @@ int sim7020_status(void) {
     return res;
 }
 
+int sim7020_at(void) {
+    return 0;
+}
+
+#ifdef TCPIPSERIALS
+static uint8_t _alloc_conn_no(void) {
+    uint8_t i;
+    for (i = 0; i <= SIM7020_MAX_CONNID; i++) {
+        if (sim7020_sockets[i].recv_callback == NULL)
+            return i;
+    }
+    printf("No connections\n");
+    return SIM7020_NO_CONNID;
+}
+#endif
 
 int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_callback_arg) {
-    int res;
     /* Create a socket: IPv4, UDP, 1 */
 
 #ifdef TCPIPSERIALS
-    {
-        static uint8_t sockid = 0;
-        sim7020_socket_t *sock = &sim7020_sockets[sockid];
-        sock->recv_callback = recv_callback;
-        sock->recv_callback_arg = recv_callback_arg;
-        return sockid++;
-    }
-#endif
+    uint8_t sockid = _alloc_conn_no();
+    if (sockid == SIM7020_NO_CONNID)
+        return -ENOMEM;
+    sim7020_socket_t *sock = &sim7020_sockets[sockid];
+    sock_udp_ep_t sock_udp_any = SOCK_IPV6_EP_ANY;
+    sock->local = sock_udp_any;
+    sock->remote = sock_udp_any;    
+    sock->recv_callback = recv_callback;
+    sock->recv_callback_arg = recv_callback_arg;
+    return sockid;
+#else
+    int res;
     SIM_LOCK();
     res = at_send_cmd_get_resp(&at_dev, "AT+CSOC=1,2,1", resp, sizeof(resp), 120*1000000);    
     SIM_UNLOCK();
@@ -392,6 +397,7 @@ int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_c
         _module_reset();
     }        
     return res;
+#endif /* TCPIPSERIALS */
 }
 
 static int _sock_close(uint8_t sockid) {
@@ -399,12 +405,17 @@ static int _sock_close(uint8_t sockid) {
     int res;
     char cmd[64];
 
+    return 0;
     assert(sockid < SIM7020_MAX_SOCKETS);
     sim7020_socket_t *sock = &sim7020_sockets[sockid];
     sock->recv_callback = NULL;
-
+#ifdef TCPIPSERIALS
+    /* Quick close */
+    sprintf(cmd, "AT+CIPCLOSE=%d,1", sockid);
+#else
     sprintf(cmd, "AT+CSOCL=%d", sockid);
-    res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
+#endif /* TCPIPSERIALS */
+    res = at_send_cmd_wait_ok(&at_dev, cmd, 10*1000000);
     return res;
 }
 
@@ -418,11 +429,42 @@ int sim7020_close(uint8_t sockid) {
 
 
 #ifdef TCPIPSERIALS
-int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
+int _sock_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
 
     int res;
     char cmd[64];
 
+    char *c = cmd;
+    int len = sizeof(cmd);
+    int n = snprintf(c, len, "AT+CIPSTART=%u,\"UDP\",", sockid);
+    //int n = snprintf(c, len, "AT+CIPSTART= \"UDP\",");
+    c += n; len -= n;
+    ipv6_addr_t *v6addr = (ipv6_addr_t *) &remote->addr.ipv6;
+    ipv4_addr_t *v4addr = IPV4_ADDR_IPV6_MAPPED(v6addr);
+    if (NULL == ipv4_addr_to_str(c, v4addr, len)) {
+        printf("_sock_connect: bad IPv4 mapped address: ");
+        ipv6_addr_print((ipv6_addr_t *) v6addr);
+        printf("\n");
+        return -1;
+    }
+    len -= strlen(c);
+    c += strlen(c);
+    snprintf(c, len, ",%u", remote->port);
+    /* Create a socket: IPv4, UDP, 1 */
+    SIM_LOCK();
+    res = at_send_cmd(&at_dev, cmd, 10*1000000);
+    do {
+        res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
+    } while ((res >= 0) && (strstr(resp, "CONNECT OK") == NULL) && (strstr(resp, "ALREADY CONNECT") == NULL));
+    SIM_UNLOCK();
+    if (res < 0) {
+        return res;
+    }
+    else
+        return 0;
+}
+
+int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
 
     assert(sockid < SIM7020_MAX_SOCKETS);
 
@@ -433,50 +475,16 @@ int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
         printf("sim7020_connect: not ipv6 mapped ipv4: ");
         ipv6_addr_print((ipv6_addr_t *) &remote->addr.ipv6);
         printf("\n");
-        return -1;
+        return -EINVAL;
     }
     if (remote->port == 0) {
         return -EINVAL;
     }
-
-    SIM_LOCK();
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPMUX=1", 5000000);            
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CLPORT= 0, \"UDP\", 8000", 120*1000000);
-    //res = at_send_cmd_wait_ok(&at_dev, "AT+CLPORT= \"UDP\", 8000", 120*1000000);
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CLPORT?", 120*1000000);
-    SIM_UNLOCK();
-
-    char *c = cmd;
-    int len = sizeof(cmd);
-    int n = snprintf(c, len, "AT+CIPSTART= %u, \"UDP\", ", sockid);
-    //int n = snprintf(c, len, "AT+CIPSTART= \"UDP\", ");
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPMUX=1", 5000000);            
-    c += n; len -= n;
-    ipv6_addr_t *v6addr = (ipv6_addr_t *) &remote->addr.ipv6;
-    ipv4_addr_t *v4addr = (ipv4_addr_t *) &v6addr->u32[3];
-    if (NULL == ipv4_addr_to_str(c, v4addr, len)) {
-        printf("connect: bad IPv4 mapped address: ");
-        ipv6_addr_print((ipv6_addr_t *) &remote->addr.ipv6);
-        printf("\n");
-        return -1;
-    }
-    len -= strlen(c);
-    c += strlen(c);
-    snprintf(c, len, ", %u", remote->port);
-    /* Create a socket: IPv4, UDP, 1 */
-    SIM_LOCK();
-    res = at_send_cmd_wait_ok(&at_dev, cmd, 120*1000000);
-    SIM_UNLOCK();
-    if (res < 0) {
-        netstats.commfail_count++;
-        _module_reset();
-    }
-    SIM_LOCK();
-    res = at_send_cmd_wait_ok(&at_dev, "AT+CIPSTATUS=0", 120*1000000);
-    SIM_UNLOCK();
-
-
-    return res;
+    sim7020_socket_t *sock = &sim7020_sockets[sockid];
+    if (memcmp(&sock->remote, remote, sizeof(sock_udp_ep_t)) != 0)
+        sock->flags |= MODULE_OOS; 
+    sock->remote = *remote;
+    return 0;
 }
 
 #else
@@ -525,21 +533,32 @@ int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
 }
 #endif
 
-int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
+static int _sock_bind(uint8_t sockid, const sock_udp_ep_t *local) {
 
-    assert(sockid < SIM7020_MAX_SOCKETS);
-    if (local->family != AF_INET6) {
-        return -EAFNOSUPPORT;
-    }
-
-    if (local->port == 0) {
-        return -EINVAL;
-    }
-#if SIM7020_BIND_ENABLE
+#ifdef SIM7020_BIND_ENABLE
+    SIM_LOCK();
     printf("binding to to ipv6 mapped ");
     ipv6_addr_print((ipv6_addr_t *) &local->addr.ipv6);
     printf(":%u\n", local->port);
 
+    int res;
+    char cmd[64];
+#ifdef TCPIPSERIALS    
+    snprintf(cmd, sizeof(cmd), "AT+CLPORT=%hu,\"UDP\",%hu",sockid, local->port);
+    res = at_send_cmd_wait_ok(&at_dev, cmd, 10*1000000);
+    SIM_UNLOCK();
+    if (res < 0) {
+        SIM_UNLOCK();
+        return res;
+    }
+    at_drain(&at_dev);
+    res = at_send_cmd(&at_dev, "AT+CLPORT?", 10*1000000);
+    do {
+        res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
+    } while (res >= 0 && strcmp(resp, "OK") != 0);
+    SIM_UNLOCK();
+    return 0;
+#else
     int res;
     char cmd[64];
     char *c = cmd;
@@ -572,10 +591,30 @@ int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
     printf("socket bound: %d\n", res);
     
     return res;
+#endif /* TCPIPSERIALS */
 #else
     (void) sockid;
     return 0;
 #endif /* SIM7020_BIND_ENABLE */
+}
+
+int sim7020_bind(uint8_t sockid, const sock_udp_ep_t *local) {
+
+    assert(sockid < SIM7020_MAX_SOCKETS);
+    if (local->family != AF_INET6) {
+        return -EAFNOSUPPORT;
+    }
+
+    if (local->port == 0) {
+        return -EINVAL;
+    }
+    
+    sim7020_socket_t *sock = &sim7020_sockets[sockid];
+    if (sock->local.port != local->port) {
+        sock->flags |= MODULE_OOS; 
+        sock->local = *local;
+    }
+    return 0;
 }
 
 int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
@@ -591,9 +630,17 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
         return -EINVAL;
 
     assert(sockid < SIM7020_MAX_SOCKETS);
+
+    sim7020_socket_t *sock = &sim7020_sockets[sockid];
+    if (sock->flags & MODULE_OOS) {
+        _sock_bind(sockid, &sock->local);
+        _sock_connect(sockid, &sock->remote);
+        sock->flags &= ~MODULE_OOS;
+    }
     SIM_LOCK();
     at_drain(&at_dev);
 #ifdef TCPIPSERIALS
+
     snprintf(cmd, sizeof(cmd), "AT+CIPSEND=%u,%u", sockid, len);
     //snprintf(cmd, sizeof(cmd), "AT+CIPSEND=%u", len);
 #else
@@ -605,10 +652,18 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
         goto fail;
     }
 #ifdef TCPIPSERIALS
-    res = at_send_cmd_wait_ok(&at_dev, (char *) data, len);
-    if (res != 0)
-        printf("send afilae\n", res);
-    goto out;
+    at_send_bytes(&at_dev, (char *) data, len);
+    do {
+        res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
+    } while (res >= 0 && strstr(resp, "SEND OK") == NULL);
+    if (res >= 0) {
+        res = len;
+        netstats.tx_success++;
+        netstats.tx_unicast_count++;
+        netstats.tx_bytes += datalen;
+        goto out;
+    }
+    /* else fall through */
 #else
     at_send_bytes(&at_dev, (char *) data, len);
     /* Skip empty line */
@@ -628,7 +683,7 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
         goto out;
     }
     printf("No accept: %s\n", resp);
-    /* fall through */
+    /* else fall through */
 #endif
 fail:
     netstats.tx_failed++;
@@ -722,24 +777,24 @@ static uint8_t recv_buf[AT_RADIO_MAX_RECV_LEN];
 #ifdef TCPIPSERIALS
 static void _receive_cb(void *arg, const char *code) {
     (void) arg;
+
+    sock_udp_ep_t remote = { .family = AF_INET6};
+    ipv6_addr_t *v6addr = (ipv6_addr_t *) &remote.addr.ipv6;
+    *v6addr = ipv6_addr_ipv4_mapped_prefix;
+    ipv4_addr_t *v4addr = IPV4_ADDR_IPV6_MAPPED(v6addr);
     int sockid, len;
-
-    int res = sscanf(code, "+RECEIVE,%d,%d:", &sockid, &len);
-    printf("RECEIVE CB %d:  '%s'\n", res, code);
-    if (res == 2) {
-
+    int res = sscanf(code, "+RECEIVE,%hhu,%hu,%hhu.%hhu.%hhu.%hhu:%hu", &sockid, &len,
+                     &v4addr->u8[0], &v4addr->u8[1], &v4addr->u8[2], &v4addr->u8[3], &remote.port);
+    if (res == 7) {
 #ifdef SIM7020_RECVHEX
         res = at_readline(&at_dev, (char *) recv_buf, sizeof(recv_buf), 0, 10*1000000);
-        printf("Read %d byte '%s'\n", res, recv_buf);
         /* Data is encoded as hex string, so
          * data length is half the string length */ 
         int rcvlen = len >> 1;
         if (rcvlen >  AT_RADIO_MAX_RECV_LEN)
             return; /* Too large */
 
-        /* Find first char after second comma */
-        char *ptr = strchr(strchr(code, ',')+1, ',')+1;
-
+        char *ptr = (char *) recv_buf;
         /* Copy into receive buffer */
         for (int i = 0; i < rcvlen; i++) {
             char hexstr[3];
@@ -752,14 +807,13 @@ static void _receive_cb(void *arg, const char *code) {
         if (rcvlen >  AT_RADIO_MAX_RECV_LEN)
             return; /* Too large */
 
-        /* Find first char after second comma */
-        char *ptr = strchr(strchr(code, ',')+1, ',')+1;
-
+        uint8_t *ptr = recv_buf;
         /* Copy into receive buffer */
         memcpy(recv_buf, ptr, rcvlen);
 #endif /* SIM7020_RECVHEX */
 
-#if 0
+#if 1
+        printf("recv %d: ");
         for (int i = 0; i < rcvlen; i++) {
             if (isprint(recv_buf[i]))
                 putchar(recv_buf[i]);
@@ -784,7 +838,7 @@ static void _receive_cb(void *arg, const char *code) {
         netstats.rx_bytes += rcvlen;
     }
     else
-        printf("csonmi_cb res %d\n", res);
+        printf("receive_cb res %d\n", res);
 }
 #else
 static void _csonmi_cb(void *arg, const char *code) {
@@ -868,9 +922,6 @@ static void _recv_loop(void) {
     urc.arg = NULL;
     at_add_urc(&at_dev, &urc);
     while (status.state == AT_RADIO_STATE_ACTIVE) {
-        static int c;
-        if ((c++ % 100) == 0)
-            printf("recv loop\n");
         SIM_LOCK();
         at_process_urc(&at_dev, URC_POLL_MSECS*(uint32_t) 0100);
         SIM_UNLOCK();
@@ -897,8 +948,10 @@ again:
     case AT_RADIO_STATE_REGISTERED:
         printf("***activate:\n");
         sim7020_activate();
-        if (status.state == AT_RADIO_STATE_ACTIVE)
+        if (status.state == AT_RADIO_STATE_ACTIVE) {
+            _acttimer_stop();
             SIM_UNLOCK();
+        }
         goto again;
     case AT_RADIO_STATE_ACTIVE:
         printf("***recv loop:\n");

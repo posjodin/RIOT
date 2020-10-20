@@ -43,7 +43,7 @@ typedef void (* udp_socket_input_callback_t)(sock_udp_t *c,
                             const uint8_t *data, uint16_t datalen);
 
 #define STARTPORT 
-uint16_t get_dyn_port(void) {
+uint16_t _get_dyn_port(void) {
     static uint16_t index = 0;
     uint16_t portno = index + IANA_DYNAMIC_PORTRANGE_MIN;
     index = (index + 1) % (IANA_DYNAMIC_PORTRANGE_MAX - IANA_DYNAMIC_PORTRANGE_MIN + 1);
@@ -70,12 +70,11 @@ static int _reg(sock_udp_t *sock,
     }
     if (local != NULL) {
         sock->local = *local;
-        sock->local.port += 40000;
     }
     else {
         sock_udp_ep_t sock_any = SOCK_IPV6_EP_ANY;
         sock->local =  sock_any;
-        sock->local.port = get_dyn_port();
+        sock->local.port = _get_dyn_port();
     }
     if (remote != NULL) 
         sock->remote = *remote;
@@ -84,13 +83,13 @@ static int _reg(sock_udp_t *sock,
         sock->remote = sock_any;
     }
     
-        int res = sim7020_udp_socket(_input_callback, sock);
+    int res = sim7020_udp_socket(_input_callback, sock);
     if (res < 0) {
         return res;
     }
     sock->sim7020_socket_id = res;
 
-    if (local != NULL) {
+    if (1 || local != NULL) {
 #if 1
         if ((res = sim7020_bind(sock->sim7020_socket_id, &sock->local)) < 0) {
             sock_udp_close(sock);

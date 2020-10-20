@@ -19,6 +19,9 @@
 
 #define SIM7020_MAX_SOCKETS 5
 
+#define SIM7020_MAX_CONNID 5
+#define SIM7020_NO_CONNID 6
+
 typedef struct {
     netstats_t ns;
 #define tx_unicast_count ns.tx_unicast_count
