@@ -17,10 +17,8 @@
 
 #define SIM7020_MAX_SEND_LEN 768
 
-#define SIM7020_MAX_SOCKETS 5
-
-#define SIM7020_MAX_CONNID 5
-#define SIM7020_NO_CONNID 6
+#define SIM7020_MAX_SOCKETS 6
+#define SIM7020_NO_SOCKET 7
 
 typedef struct {
     netstats_t ns;
@@ -39,6 +37,7 @@ typedef struct {
 typedef void (* sim7020_recv_callback_t)(void *, const uint8_t *data, uint16_t datalen);
 
 int sim7020_init(void);
+int sim7020_reset(void);
 int sim7020_register(void);
 int sim7020_activate(void);
 int sim7020_status(void);

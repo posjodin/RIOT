@@ -27,8 +27,6 @@
 
 #include "net/sim7020.h"
 
-#define SIM7020_MAX_SOCKETS 5
-
 #define _MSG_TYPE_CLOSE     (0x4123)
 #define _MSG_TYPE_TIMEOUT   (0x4124)
 #define _MSG_TYPE_RCV       (0x4125)
