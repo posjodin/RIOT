@@ -437,6 +437,11 @@ ifneq (,$(filter gnrc_pktdump,$(USEMODULE)))
   USEMODULE += od
 endif
 
+ifneq (,$(filter rime,$(USEMODULE)))
+  DEFAULT_MODULE += auto_init_gnrc_pktdump
+  USEMODULE += gnrc_pktbuf
+endif
+
 ifneq (,$(filter od,$(USEMODULE)))
   USEMODULE += fmt
 endif
@@ -1129,4 +1134,13 @@ ifneq (,$(filter test_utils_interactive_sync,$(USEMODULE)))
   ifneq (,$(filter shell,$(USEMODULE)))
     DEFAULT_MODULE += test_utils_interactive_sync_shell
   endif
+endif
+
+ifneq (,$(filter sim7020_%, $(USEMODULE)))
+  USEMODULE += sim7020
+  USEMODULE += sim7020_ipv6
+  USEMODULE += ipv6_addr
+  USEMODULE += ipv4_addr
+  USEMODULE += at
+  USEMODULE += at_urc
 endif

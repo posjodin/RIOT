@@ -18,6 +18,7 @@ USEMODULE += gnrc_ipv6_router_default
 USEMODULE += gnrc_udp
 # Add a routing protocol
 USEMODULE += gnrc_rpl
+USEMODULE += gnrc_rpl_srh
 USEMODULE += auto_init_gnrc_rpl
 # This application dumps received packets to STDIO using the pktdump module
 USEMODULE += gnrc_pktdump
@@ -52,4 +53,7 @@ QUIET ?= 1
 include $(RIOTBASE)/Makefile.include
 
 # Set a custom channel if needed
+# For KTH Contiki gateway
+DEFAULT_CHANNEL=25
+DEFAULT_PAN_ID=0xFEED
 include $(RIOTMAKE)/default-radio-settings.inc.mk

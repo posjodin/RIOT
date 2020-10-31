@@ -222,7 +222,7 @@ int sock_dns_query(const char *domain_name, void *addr_out, int family)
         if (res <= 0) {
             continue;
         }
-        res = sock_udp_recv(&sock_dns, dns_buf, sizeof(dns_buf), 1000000LU, NULL);
+        res = sock_udp_recv(&sock_dns, dns_buf, sizeof(dns_buf), 10*1000000LU, NULL);
         if (res > 0) {
             if (res > (int)DNS_MIN_REPLY_LEN) {
                 if ((res = _parse_dns_reply(dns_buf, res, addr_out,

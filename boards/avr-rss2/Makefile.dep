@@ -1,4 +1,5 @@
 USEMODULE += boards_common_atmega
+USEMODULE += at24mac
 
 ifneq (,$(filter eui_provider,$(USEMODULE)))
   USEMODULE += at24mac

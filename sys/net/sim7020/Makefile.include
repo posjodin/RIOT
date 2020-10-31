@@ -1,0 +1,6 @@
+PSEUDOMODULES += sim7020_ipv6
+
+USEMODULE_INCLUDES += $(RIOTBASE)/sys/net/sim7020/sock/include
+ifneq (,$(filter sim7020_ipv6,$(USEMODULE)))
+  CFLAGS += -DSOCK_HAS_IPV6
+endif
