@@ -79,6 +79,9 @@ endif
 ifneq (,$(filter gnrc_pktdump,$(USEMODULE)))
   DIRS += pktdump
 endif
+ifneq (,$(filter rime,$(USEMODULE)))
+  DIRS += rime
+endif
 ifneq (,$(filter gnrc_rpl,$(USEMODULE)))
   DIRS += routing/rpl
 endif
