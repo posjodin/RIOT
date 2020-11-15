@@ -35,6 +35,7 @@ static char resp[1024];
 static struct at_radio_status {
     enum {
         AT_RADIO_STATE_NONE,
+        AT_RADIO_STATE_INIT,
         AT_RADIO_STATE_IDLE,
         AT_RADIO_STATE_REGISTERED,
         AT_RADIO_STATE_ACTIVE
@@ -69,6 +70,7 @@ static char sim7020_stack[THREAD_STACKSIZE_DEFAULT + AT_BUF_SIZE];
 #define SIM7020_PRIO         (THREAD_PRIORITY_MAIN + 2)
 static kernel_pid_t sim7020_pid = KERNEL_PID_UNDEF;
 
+
 static int _sock_close(uint8_t sockid);
 static void *sim7020_thread(void *);
 
@@ -95,6 +97,10 @@ static uint8_t _conn_alloc(void) {
 }
 #endif
 
+uint32_t sim7020_activation_usecs; /* How many usecs it took to activate uplink */
+uint64_t sim7020_active_stamp; /* Timestamp when activatation completed */
+uint64_t sim7020_prev_active_duration_usecs; /* How long previous activation lasted */
+
 int sim7020_init(void) {
 
     sim7020_powerkey_init();
@@ -117,12 +123,16 @@ int sim7020_init(void) {
             return sim7020_pid;
         }
     }
+    status.state = AT_RADIO_STATE_NONE;
+    sim7020_activation_usecs = xtimer_now_usec();
     return 0;
 }
 
 /* Activation timer to abort activation attempts taking too long
  */
+
 static uint8_t _acttimer_expired_flag = 0;
+
 static void _acttimer_cb(void *arg) {
     (void) arg;
     printf("ACTTIMER EXPIRED\n");
@@ -154,6 +164,11 @@ static void _module_reset(void) {
     _conn_invalidate();
     netstats.reset_count++;
     status.state = AT_RADIO_STATE_NONE;
+    sim7020_activation_usecs = xtimer_now_usec();
+    if (sim7020_active_stamp != 0) {
+        sim7020_prev_active_duration_usecs = xtimer_now_usec64() - sim7020_active_stamp;
+        sim7020_active_stamp = 0;
+    }
 }
 
 /*
@@ -234,16 +249,18 @@ int sim7020_reset(void) {
 //#define APN "internet"
 
 int sim7020_register(void) {
-    int res;
+    int res = 0;
 
     SIM_LOCK();
+#ifdef FORCE_OPERATOR
     /* Force operator selection */
-    res =at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"" OPERATOR "\"", 240*1000000);
+    res = at_send_cmd_wait_ok(&at_dev, "AT+COPS=1,2,\"" OPERATOR "\"", 240*1000000);
     if (res < 0) {
         netstats.commfail_count++;
-        goto ret;
+        SIM_UNLOCK();
+        return res;
     }
-
+#endif /* FORCE_OPERATOR */
     while (!_acttimer_expired()) {
         res = at_send_cmd_get_resp(&at_dev, "AT+CREG?", resp, sizeof(resp), 120*1000000);
         if (res < 0) {
@@ -275,7 +292,6 @@ int sim7020_register(void) {
         res = 0;
     }
 
-ret:
     SIM_UNLOCK();
     return res;
 }
@@ -321,7 +337,7 @@ int sim7020_activate(void) {
         }
     }
     at_drain(&at_dev);
-    while (attempts--) {
+    while (!_acttimer_expired() && attempts--) {
       /* Bring Up Wireless Connection with GPRS or CSD. This may take a while. */
       printf("Bringing up wireless, be patient\n");
       res = at_send_cmd_wait_ok(&at_dev, "AT+CIICR", 600*1000000);
@@ -657,7 +673,13 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
         sock->flags &= ~MODULE_OOS;
     }
     SIM_LOCK();
+    /* Check signal quality */
+    (void) at_send_cmd_wait_ok(&at_dev, "AT+CSQ", 10*1000000);
+    SIM_UNLOCK();
+
+    SIM_LOCK();
     at_drain(&at_dev);
+
 #ifdef TCPIPSERIALS
 
     snprintf(cmd, sizeof(cmd), "AT+CIPSEND=%u,%u", sockid, len);
@@ -769,6 +791,11 @@ int sim7020_resolve(const char *domain, char *result) {
     
     timeout_timer.callback = _resolve_timeout_cb;
     xtimer_set(&timeout_timer, 10*1000000U);
+
+    SIM_LOCK();
+    /* Check signal quality */
+    (void) at_send_cmd_wait_ok(&at_dev, "AT+CSQ", 10*1000000);
+    SIM_UNLOCK();
 
     char cmd[64];
     snprintf(cmd, sizeof(cmd), "AT+CDNSGIP=%s", domain);
@@ -951,8 +978,11 @@ static void *sim7020_thread(void *arg) {
     while (1) {
         switch (status.state) {
         case AT_RADIO_STATE_NONE:
-            printf("***module init:\n");
             _acttimer_start();
+            status.state = AT_RADIO_STATE_INIT;
+            break;
+        case AT_RADIO_STATE_INIT:
+            printf("***module init:\n");
             _module_init();
             break;
         case AT_RADIO_STATE_IDLE:
@@ -963,6 +993,8 @@ static void *sim7020_thread(void *arg) {
             printf("***activate:\n");
             sim7020_activate();
             if (status.state == AT_RADIO_STATE_ACTIVE) {
+                sim7020_activation_usecs = xtimer_now_usec() - sim7020_activation_usecs;
+                sim7020_active_stamp = xtimer_now_usec64();
                 _acttimer_stop();
                 SIM_UNLOCK();
             }

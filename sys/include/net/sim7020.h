@@ -49,6 +49,7 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen);
 void *sim7020_recv_thread(void *arg);
 int sim7020_resolve(const char *domain, char *result);
 sim7020_netstats_t *sim7020_get_netstats(void);
+int sim7020_active(void);
 int sim7020_at(const char *cmd);
 int sim7020_test(uint8_t sockid, int count);
 
