@@ -269,7 +269,7 @@ int sim7020_register(void) {
         else {
             uint8_t creg;
                 
-            if (1 == (sscanf(resp, "%*[^:]: %*d,%hhd", &creg))) {
+            if (1 == (sscanf(resp, "%*[^:]: %*" SCNu8 ",%" SCNu8, &creg))) {
                 /* Wait for 1 (Registered, home network) or 5 (Registered, roaming) */
                 if (creg == 1 || creg == 5) {
                     status.state = AT_RADIO_STATE_REGISTERED;
@@ -277,7 +277,7 @@ int sim7020_register(void) {
                 }
             }
         }
-        xtimer_sleep(5);
+        xtimer_sleep(1);
     }
     /* Wait for GPRS/Packet Domain attach */
     while (!_acttimer_expired()) {
@@ -412,7 +412,7 @@ int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_c
     if (res > 0) {
         uint8_t sockid;
 
-        if (1 == (sscanf(resp, "+CSOC: %hhd", &sockid))) {
+        if (1 == (sscanf(resp, "+CSOC: %" SCNu8, &sockid))) {
             assert(sockid < SIM7020_MAX_SOCKETS);
             sim7020_socket_t *sock = &sim7020_sockets[sockid];
             sock->recv_callback = recv_callback;
@@ -717,8 +717,8 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
         printf("Timeout waiting for DATA ACCEPT confirmation\n");
         goto fail;
     }
-    unsigned int nsent;
-    if (1 == (sscanf(resp, "DATA ACCEPT: %d", &nsent))) {
+    unsigned uint16_t nsent;
+    if (1 == (sscanf(resp, "DATA ACCEPT: %" SCNu16, &nsent))) {
         res = nsent;
         netstats.tx_success++;
         netstats.tx_unicast_count++;
@@ -753,10 +753,14 @@ static void _resolve_urc_cb(void *arg, const char *code) {
     const char *resp = code;
 
     mutex_lock(&resolve_cond_mutex);
-    if (1 == sscanf(resp, "+CDNSGIP: %*d,\"%*[^\"]\",\"%[^\"]", result)) {
+    if (1 == sscanf(resp, "+CDNSGIP: 1,\"%*[^\"]\",\"%[^\"]", result)) {
         resolve_state = R_DONE;
     }
     else {
+        uint8_t errcode;
+        if (1 == sscanf(resp, "+CDNSGIP: 0,%" SCNu8, &errcode)) {
+            printf("Resolve error %" PRIu8, errcode);
+        }
         resolve_state = R_ERROR;
     }
     cond_signal(&resolve_cond);
@@ -835,9 +839,11 @@ static void _receive_cb(void *arg, const char *code) {
     *v6addr = ipv6_addr_ipv4_mapped_prefix;
     ipv4_addr_t *v4addr = IPV4_ADDR_IPV6_MAPPED(v6addr);
     uint8_t sockid;
-    size_t len;
-    int res = sscanf(code, "+RECEIVE,%hhu,%hu,%hhu.%hhu.%hhu.%hhu:%hu", &sockid, &len,
-                     &v4addr->u8[0], &v4addr->u8[1], &v4addr->u8[2], &v4addr->u8[3], &remote.port);
+    uint16_t len;
+    int res;
+    res = sscanf(code, "+RECEIVE,%" SCNu8 ",%" SCNu16 ",%" SCNu8 ".%" SCNu8 ".%" SCNu8 ".%" SCNu8 ":%" SCNu16,
+                 &sockid, &len,
+                 &v4addr->u8[0], &v4addr->u8[1], &v4addr->u8[2], &v4addr->u8[3], &remote.port);
     if (res == 7) {
 #ifdef SIM7020_RECVHEX
         res = at_readline(&at_dev, (char *) recv_buf, sizeof(recv_buf), 0, 10*1000000);
@@ -866,7 +872,7 @@ static void _receive_cb(void *arg, const char *code) {
 #endif /* SIM7020_RECVHEX */
 
         if (sockid >= SIM7020_MAX_SOCKETS) {
-            printf("Illegal sim socket %hhu\n", sockid);
+            printf("Illegal sim socket %" PRIu8 "\n", sockid);
             return;
         }
         sim7020_socket_t *sock = &sim7020_sockets[sockid];
@@ -885,9 +891,11 @@ static void _receive_cb(void *arg, const char *code) {
 #else
 static void _csonmi_cb(void *arg, const char *code) {
     (void) arg;
-    int sockid, len;
+    uint8_t sockid;
+    uint16_t len;
+    int res;
 
-    int res = sscanf(code, "+CSONMI: %d,%d,", &sockid, &len);
+    res = sscanf(code, "+CSONMI: %" SCNu8 ",%" SCNu16 ",", &sockid, &len);
     if (res == 2) {
 
 #ifdef SIM7020_RECVHEX
