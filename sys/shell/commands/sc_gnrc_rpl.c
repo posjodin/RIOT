@@ -30,6 +30,10 @@
 #include "net/gnrc/rpl/p2p_structs.h"
 #endif
 
+#ifdef BOARD_AVR_RSS2
+#include "pstr_print.h"
+#endif
+
 int _gnrc_rpl_init(char *arg)
 {
     kernel_pid_t iface_pid = atoi(arg);

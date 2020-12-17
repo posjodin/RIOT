@@ -38,6 +38,10 @@
 #include "net/l2filter.h"
 #endif
 
+#ifdef BOARD_AVR_RSS2
+#include "pstr_print.h"
+#endif
+
 /**
  * @brief   The default IPv6 prefix length if not specified.
  */

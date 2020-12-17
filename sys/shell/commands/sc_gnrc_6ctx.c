@@ -26,6 +26,10 @@
 #include "timex.h"
 #include "xtimer.h"
 
+#ifdef BOARD_AVR_RSS2
+#include "pstr_print.h"
+#endif
+
 static xtimer_t del_timer[GNRC_SIXLOWPAN_CTX_SIZE];
 void _del_cb(void *ptr)
 {
