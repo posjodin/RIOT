@@ -70,7 +70,7 @@ inline uint32_t now(void)
 
 /* From IRQ context */
 
-int sync;
+int sync = 0;
 
 static void rx_cb(void *arg, uint8_t data)
 {
@@ -110,8 +110,8 @@ void parse_data(unsigned char *RTT)
     /* Calc obstacle distance of the maximum reflection intensity object */
     YCTa = RTT[3];      
     YCTb = RTT[4];
-    YCT1 = (YCTa << 8) + YCTb;
-    printf("D: %-5u ", YCT1);
+    YCT1 = (((uint16_t) YCTa) << 8) + YCTb;
+    printf("D:  %-5u ", YCT1);
 
     for(int i = 6; i < NOB-3; i++) {
       if(RTT[i] > thresh) {
@@ -120,6 +120,7 @@ void parse_data(unsigned char *RTT)
 	printf("%-3.0f_%-u ", dist, RTT[i]);
       }
     }
+    printf("\n");
   //lr.time = now();
 }
 
@@ -142,21 +143,29 @@ static void *parser(void *arg)
       buf[i++] = (int)ringbuffer_get_one(&(ctx[dev].rx_buf));
       if(i == (sizeof(buf)-1))
 	break;
-      xtimer_usleep(100); // Investigation needed */
+      //xtimer_usleep(100); // Investigation needed */
     }
 
     /* Check so reading is ok in beginning and end */
 
     for(i = 0; i < 3; i++) {
       if(buf[i] != 0xff)
-	continue;
+	goto error;
     }
     
     if( buf[NOB-1] || buf[NOB-2] || buf[NOB-3] ) {
 	printf("NOT NULL %02X \n", buf[NOB-1]);
-	continue;
+	goto error;
     }
+
+#if DEBUG
+    for(i = 0; i < NOB; i++) {
+      printf(" %02X", buf[i]);
+    }
+    printf("\n");
+#endif
     parse_data(buf);
+ error:;
   } 
   return NULL;
 }
