@@ -5,7 +5,7 @@
  * Author  : Peter Sjodin, KTH Royal Institute of Technology
  * Created : 2017-04-21
  *
- * Hacked by Robert Olsson
+ * Hacked by Robert Olsson 2021-01-19
  */
 
 /*
@@ -26,16 +26,18 @@
 #include <errno.h>
 #include <stdint.h>
 #include "xtimer.h"
+#include "pms5003.h"
 
-/* Two preamble bytes */
-#define PRE1 0x42
-#define PRE2 0x4d
-/* Valid values for body length field */
-#define PMSMINBODYLEN 20
-#define PMSMAXBODYLEN 28
-/* Buffer holds frame body plus preamble (two bytes)
- * and length field (two bytes) */
-#define PMSBUFFER (PMSMAXBODYLEN + 4)
+#define PMS5003_I2C_ADDR 0x12
+uint16_t i2c_addr = PMS5003_I2C_ADDR;
+i2c_t i2c_dev = 0;
+
+#define PM_TREAD_PRIO        (THREAD_PRIORITY_MAIN - 1)
+#define PM_TREAD_TYPE        (0xabcd)
+
+static kernel_pid_t pms5003_thread_pid;
+static char pms5003_thread_stack[THREAD_STACKSIZE_MAIN];
+
 uint8_t buf[PMSBUFFER];
 
 /* Frame assembly statistics */
@@ -55,6 +57,88 @@ struct pms_config {
   unsigned sample_period;    /* Time between samples (sec) */
   unsigned warmup_interval; /* Warmup time (sec) */
 } pms_config;
+
+uint32_t now(void)
+{
+  return rtt_get_counter();
+}
+
+uint16_t pms5003_pm1(void)
+{
+  return PM1;
+}
+uint16_t pms5003_pm2_5(void)
+{
+  return PM2_5;
+}
+uint16_t pms5003_pm10(void)
+{
+  return PM10;
+}
+uint16_t pms5003_pm1_atm(void)
+{
+  return PM1_ATM;
+}
+uint16_t pms5003_pm2_5_atm(void)
+{
+  return PM2_5_ATM;
+}
+uint16_t pms5003_pm10_atm(void)
+{
+  return PM10_ATM;
+}
+uint16_t pms5003_db0_3(void)
+{
+  return DB0_3;
+}
+uint16_t pms5003_db0_5(void)
+{
+  return DB0_5;
+}
+uint16_t pms5003_db1(void)
+{
+  return DB1;
+}
+uint16_t pms5003_db2_5(void)
+{
+  return DB2_5;
+}
+uint16_t pms5003_db5(void)
+{
+  return DB5;
+}
+uint16_t pms5003_db10(void)
+{
+  return DB10;
+}
+uint32_t pms5003_timestamp(void)
+{
+  return now();
+}
+uint32_t pms5003_valid_frames(void)
+{
+  return valid_frames;
+}
+uint32_t pms5003_invalid_frames(void)
+{
+  return invalid_frames;
+}
+
+void pms5003_config_sample_period(unsigned int sample_period) {
+  pms_config.sample_period = sample_period;
+}
+
+void pms5003_config_warmup_interval(unsigned int warmup_interval) {
+  pms_config.warmup_interval = warmup_interval;
+}
+
+unsigned pms5003_get_sample_period(void) {
+  return pms_config.sample_period;
+}
+
+unsigned pms5003_get_warmup_interval(void) {
+  return pms_config.warmup_interval;
+}
 
 /**
  * Sensor API for PMS5003
@@ -144,4 +228,107 @@ int pmsframe(uint8_t *buf)
     DB10 = (buf[26] << 8) | buf[27];
   }
   return 1;
+}
+
+/**
+ * Initialize. Create event, and start timer-driven process.
+ * If UART enabled, also install UART callback function and
+ * start PMS frame assembly process.
+ */
+
+int i2c_probe(i2c_t dev, uint16_t i2c_addr)
+{
+    char dummy[1];
+    int retval;
+
+    if (i2c_acquire(dev)){
+        puts("Failed to acquire I2C device");
+        return -1;
+    }
+
+    while (-EAGAIN == (retval = i2c_read_byte(dev, i2c_addr, dummy, 0))) {
+      /* retry until bus arbitration succeeds */
+    }
+
+    switch (retval) {
+
+    case 0:
+      /* success: Device did respond */
+      printf("Found 0x%02X\n", i2c_addr);
+      break;
+      
+    case -ENXIO:
+      /* No ACK --> no device */
+      puts("Not found\n");
+      break;
+    default:
+      /* Some unexpected error */
+      puts("Err 2\n");
+      break;
+    }
+
+    i2c_release(dev);
+    return 0;
+}
+
+void wait_ms(uint32_t timeout)
+{
+  uint32_t tmo = timeout * 1000U;
+  xtimer_usleep(tmo);
+}
+
+int read_pms5002(i2c_t i2c_dev, uint16_t i2c_addr)
+{
+  int res = 1;
+  uint16_t reg = 0;
+  uint8_t flags = 0;
+
+  res = i2c_acquire(i2c_dev);
+  
+  if (res) {
+    return res;
+  }
+  
+  res = i2c_read_regs(i2c_dev, i2c_addr, reg, buf, PMSBUFFER, flags);
+
+  if(res)
+    printf("res=%d\n", res);
+
+  i2c_release(i2c_dev);
+
+  pmsframe(buf);
+  printpm();
+  
+  return res;
+}
+
+static void *pms5003_thread(void *arg)
+{
+  (void)arg;
+
+  while (1) {
+    wait_ms(10*1000);
+    read_pms5002(i2c_dev, i2c_addr);
+  }
+  return NULL;
+}
+
+void pms5003_init(void)
+{
+
+  i2c_probe(i2c_dev, i2c_addr);
+
+  pms5003_config_sample_period(PMS_SAMPLE_PERIOD);
+  pms5003_config_warmup_interval(PMS_WARMUP_INTERVAL);
+  
+  configured_on = 1;
+
+  /* start the parser thread */
+  pms5003_thread_pid = thread_create(pms5003_thread_stack, sizeof(pms5003_thread_stack),
+			      PM_TREAD_PRIO, 0, pms5003_thread, NULL, "pm_tread");
+  
+#ifdef DEBUG
+  printf("PMS5003: sample period %d, warmup interval %d\n",
+         pms_config.sample_period, pms_config.warmup_interval);
+#endif /* DEBUG */
 }
