@@ -28,7 +28,6 @@
 #include "xtimer.h"
 #include "pms5003.h"
 
-#define PMS5003_I2C_ADDR 0x12
 uint16_t i2c_addr = PMS5003_I2C_ADDR;
 i2c_t i2c_dev = 0;
 
@@ -172,7 +171,7 @@ static int check_pmsframe(uint8_t *buf)
   return pmssum == sum;
 }
 
-void printpm_old(void)
+void printpm(void)
 {
   printf("PMS frames: valid %lu, invalid %lu\n",
          valid_frames, invalid_frames);
@@ -180,15 +179,6 @@ void printpm_old(void)
   printf("PM1_ATM=%-u PM2.5_ATM=%-u PM10_ATM=%-u\n",
          PM1_ATM, PM2_5_ATM, PM10_ATM);
   printf(" DB0_3=%-u DB0_5=%-u DB1=%-u DB2_5=%-u DB5=%-u DB10=%-u\n",
-         DB0_3, DB0_5, DB1, DB2_5, DB5, DB10);
-}
-
-void printpm(void)
-{
-  printf("%-u %-u %-u", PM1, PM2_5, PM10);
-  printf("  %-u %-u %-u",
-         PM1_ATM, PM2_5_ATM, PM10_ATM);
-  printf("   %-u %-u %-u %-u %-u %-u\n",
          DB0_3, DB0_5, DB1, DB2_5, DB5, DB10);
 }
 
@@ -297,8 +287,9 @@ int read_pms5002(i2c_t i2c_dev, uint16_t i2c_addr)
   i2c_release(i2c_dev);
 
   pmsframe(buf);
+#ifdef DEBUG
   printpm();
-  
+#endif
   return res;
 }
 
@@ -306,8 +297,10 @@ static void *pms5003_thread(void *arg)
 {
   (void)arg;
 
+  uint32_t interval = pms_config.sample_period * 1000;
+
   while (1) {
-    wait_ms(10*1000);
+    wait_ms(interval);
     read_pms5002(i2c_dev, i2c_addr);
   }
   return NULL;
@@ -315,12 +308,10 @@ static void *pms5003_thread(void *arg)
 
 void pms5003_init(void)
 {
-
   i2c_probe(i2c_dev, i2c_addr);
 
   pms5003_config_sample_period(PMS_SAMPLE_PERIOD);
   pms5003_config_warmup_interval(PMS_WARMUP_INTERVAL);
-  
   configured_on = 1;
 
   /* start the parser thread */

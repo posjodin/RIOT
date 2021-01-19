@@ -1,0 +1,19 @@
+PM pms5003 i2c driver
+=====================
+
+Authors
+--------
+
+RIOT-OS implementation for Plantower PMS 5003 series I2C dust sensors.
+The I2C bus is probed for the sensor. The reading is synchronous running
+in a separate thread. THe implementation has been tested against the
+PMS 5003i (I2C)
+
+
+TODO
+-----
+The sensor is duty-cycled through the SET input signal. The duty-cycling
+intervals are configurable.
+
+Move pms5003.[ch] into a driver.
+RIOT PR

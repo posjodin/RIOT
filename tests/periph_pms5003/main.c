@@ -1,4 +1,4 @@
-#define VERSION "0.5 2021-01-18" /* Robert Olsson/KTH 20210-01-13 */
+#define VERSION "0.5 2021-01-19" /* Robert Olsson/KTH 20210-01-13 */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -28,13 +28,15 @@ static int cmd_ver(__attribute__((unused)) int ac, __attribute__((unused)) char 
 
 static int cmd_read(__attribute__((unused)) int ac, __attribute__((unused)) char **av)
 {
-  //read_pms5002(i2c_dev, i2c_addr);
+  printf("PM[1 2.5 10]: %-u %-u %-u\n", pms5003_pm1(), pms5003_pm2_5(), pms5003_pm10());
+  printf("DB[0.3 0.5 1.0 2.5 5 10]: %-u %-u %-u %-u %-u %-u\n", pms5003_db0_3(), pms5003_db0_5(),
+	 pms5003_db1(),  pms5003_db2_5(), pms5003_db5(), pms5003_db10());
   return 0;
 }
 
 static const shell_command_t shell_commands[] = {
-  { "ver", "code version", cmd_ver },
-  { "read", "Run RFid inventory", cmd_read },
+  { "ver", "version", cmd_ver},
+  { "read", "read PM sensor data", cmd_read},
   { NULL, NULL, NULL }
 };
 

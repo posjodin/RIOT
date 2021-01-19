@@ -52,6 +52,12 @@
 #define PMS_WARMUP_INTERVAL    30
 #endif /* PMS5003_WARMUP_INTERVAL */
 
+#ifdef PMS5003_CONF_I2C_ADDR
+#define PMS5003_I2C_ADDR       PMS5003_CONF_I2C_ADDR
+#else
+#define PMS5003_I2C_ADDR 0x12
+#endif /* PMS5003_CONF_I2C_ADDR */
+
 void pms5003_init(void);
 void pms5003_off(void);
 
