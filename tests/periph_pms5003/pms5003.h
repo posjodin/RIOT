@@ -79,21 +79,6 @@ void pms5003_set_warmup_interval(unsigned int);
 unsigned pms5003_get_sample_period(void);
 unsigned pms5003_get_warmup_interval(void);
 
-/* Two preamble bytes */
-#define PRE1 0x42
-#define PRE2 0x4d
-/* Valid values for body length field */
-#define PMSMINBODYLEN 20
-#define PMSMAXBODYLEN 28
-/* Buffer holds frame body plus preamble (two bytes)
- * and length field (two bytes) */
-#define PMSBUFFER (PMSMAXBODYLEN + 4)
-
-extern uint8_t buf[PMSBUFFER];
 void pms5003_init(void);
-int pmsframe(uint8_t *buf);
-void printpm(void);
-void printpm_old(void);
-uint32_t now(void);
 
 #endif /* PMS5003_H */

@@ -28,8 +28,8 @@
 #include "xtimer.h"
 #include "pms5003.h"
 
-uint16_t i2c_addr = PMS5003_I2C_ADDR;
-i2c_t i2c_dev = 0;
+static uint16_t i2c_addr = PMS5003_I2C_ADDR;
+static i2c_t i2c_dev = 0;
 
 #define PM_TREAD_PRIO        (THREAD_PRIORITY_MAIN - 1)
 #define PM_TREAD_TYPE        (0xabcd)
@@ -37,13 +37,22 @@ i2c_t i2c_dev = 0;
 static kernel_pid_t pms5003_thread_pid;
 static char pms5003_thread_stack[THREAD_STACKSIZE_MAIN];
 
+/* Two preamble bytes */
+#define PRE1 0x42
+#define PRE2 0x4d
+/* Valid values for body length field */
+#define PMSMINBODYLEN 20
+#define PMSMAXBODYLEN 28
+/* Buffer holds frame body plus preamble (two bytes)
+ * and length field (two bytes) */
+#define PMSBUFFER (PMSMAXBODYLEN + 4)
 uint8_t buf[PMSBUFFER];
 
 /* Frame assembly statistics */
 static uint32_t invalid_frames, valid_frames;
 
 /* Sensor configured on? */
-uint8_t configured_on = 0;
+static uint8_t configured_on = 0;
 
 /* Last readings of sensor data */
 static uint16_t PM1, PM2_5, PM10;
@@ -57,7 +66,7 @@ struct pms_config {
   unsigned warmup_interval; /* Warmup time (sec) */
 } pms_config;
 
-uint32_t now(void)
+static uint32_t now(void)
 {
   return rtt_get_counter();
 }
@@ -186,7 +195,7 @@ void printpm(void)
  * Frame received from PMS sensor. Validate and update sensor data.
  * Return 1 if valid frame, otherwise 0
  */
-int pmsframe(uint8_t *buf)
+static int pmsframe(uint8_t *buf)
 {
   int len;
   
@@ -226,7 +235,7 @@ int pmsframe(uint8_t *buf)
  * start PMS frame assembly process.
  */
 
-int i2c_probe(i2c_t dev, uint16_t i2c_addr)
+static int i2c_probe(i2c_t dev, uint16_t i2c_addr)
 {
     char dummy[1];
     int retval;
@@ -267,7 +276,7 @@ void wait_ms(uint32_t timeout)
   xtimer_usleep(tmo);
 }
 
-int read_pms5002(i2c_t i2c_dev, uint16_t i2c_addr)
+static int read_pms5002(i2c_t i2c_dev, uint16_t i2c_addr)
 {
   int res = 1;
   uint16_t reg = 0;
