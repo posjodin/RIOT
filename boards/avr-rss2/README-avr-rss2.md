@@ -5,8 +5,8 @@ Document version
 ----------------
 V1.3 2021-01-25
 
-This guide's aim is to help you start using RIOT-OS for RSS2 boards
-* Based on MCU AtMega256RFR2 (Current. Rev2.3 and Rev2.4)
+This guide's aim is to help you start using RIOT-OS on RSS2 boards
+* Based on MCU AtMega256RFR2 (Board. Rev2.3 and Rev2.4)
 
 This guide assumes that you have basic understanding of how to use the 
 command line and can perform basic admin tasks on UNIX family OSs. You
@@ -58,8 +58,7 @@ Toolchain
 ---------
 The Atmel toolcahin is available in most operating systems.
 
-For a full robust toolchain and easy installation on Ubuntu:
- apt-get install gcc-avr avr-libc avrdude
+For a full robust toolchain and easy installation on Ubuntu:  apt-get install gcc-avr avr-libc avrdude
 
 Toolchain alternative I
 -----------------------
@@ -165,7 +164,7 @@ countries.
 References
 ----------
 AtMega64/128/256/RFR2 chip documentation available via Atmel.
-Schematics and boards description. Available via Radio-Senors
+Schematics and boards description. Available via Radio-Sensors
 Smart Reduced Power Consumption Techniques. AT02594 available via Atmel.
 
 Board (Rev2.4) anatomy with connectors:
