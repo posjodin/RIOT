@@ -3,7 +3,7 @@ Getting Started with RIOT-OS using avr-rss2
 
 Document version
 ----------------
-V1.3 2021-01-25
+V1.4 2021-01-25
 
 This guide's aim is to help you start using RIOT-OS on RSS2 boards
 * Based on MCU AtMega256RFR2 (Board. Rev2.3 and Rev2.4)
@@ -46,8 +46,8 @@ An addtional 2:nd USART is on the chip can be used after HW modification.
 
 RIOT-OS Port Features
 ---------------------
-Atmel AVR is well supported in RIOT-OS. AVR MCU is also used in many
-arduiono boards.
+Atmel AVR is well supported in RIOT-OS. Atmel AVR MCU's is also used
+in many of the Arduino boards.
 
 The board has the following features:
 * Standard, E64 address from built-in chip. Chip also has a 128bit ID.
@@ -58,7 +58,8 @@ Toolchain
 ---------
 The Atmel toolcahin is available in most operating systems.
 
-For a full robust toolchain and easy installation on Ubuntu:  apt-get install gcc-avr avr-libc avrdude
+For a full robust toolchain and easy installation on Ubuntu:\
+apt-get install gcc-avr avr-libc avrdude
 
 Toolchain alternative I
 -----------------------
@@ -81,7 +82,7 @@ installed with the command `brew install avrdude`. (You first need to
 
 Toolchain Windows
 -----------------
-MIT has an updated instruction. You need to be root.
+MIT has an updated instruction. You need to be root.\
 http://fab.cba.mit.edu/classes/863.16/doc/projects/ftsmin/windows_avr.html
 
 Microchip repo:
@@ -106,8 +107,8 @@ Programming using avrdude using serial bootloader. (TTL-USB cable)
 Press the RESET button. The bootloader waits for boot commands for 3 seconds.
 During that time the flash command should be given.
 
-Flashing commnad line example:
-    avrdude -V -p m256rfr2 -c stk500v2  -P /dev/ttyUSB0 -b 115200 -e -U flash:w:bin/avr-rss2/hello-world.elf
+Flashing commnad line example:\
+avrdude -V -p m256rfr2 -c stk500v2  -P /dev/ttyUSB0 -b 115200 -e -U flash:w:bin/avr-rss2/hello-world.elf
 
 
 RIOT-OS applications
