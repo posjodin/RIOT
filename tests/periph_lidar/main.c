@@ -49,13 +49,51 @@ void wait_ms(int timeout)
 int lidar_version(int dev)
 {
   /* Version 5A 04 01 5F */
-  
+
   if(1)  {
     buf[0] = 0x5A;
     buf[1] = 0x04;
     buf[2] = 0x01;
     buf[3] = 0x5F;
     uart_write(UART_DEV(dev), buf, 4);
+  }
+  return 1;
+}
+
+unsigned char csum(unsigned char *in, unsigned char len) 
+{
+  int i;
+  unsigned char cs = 0;
+  for(i=0; i<len; i++) {
+    cs += in[i];
+  }
+  return cs;
+}
+
+int lidar_set_i2c(int dev)
+{
+  /* Mode 5A 05 0A MODE SU */
+  if(1)  {
+    buf[0] = 0x5A;
+    buf[1] = 0x05;
+    buf[2] = 0x0a;
+    buf[3] = 0x01;
+    buf[4] = csum(&buf[0], 4);
+    uart_write(UART_DEV(dev), buf, 5);
+  }
+  return 1;
+}
+
+int lidar_set_i2c_addr(int dev)
+{
+  /* I2C ADDR 5A 05 0B ADDR SU */
+  if(1)  {
+    buf[0] = 0x5A;
+    buf[1] = 0x05;
+    buf[2] = 0x0b;
+    buf[3] = 0x11; /* 0x01~0x7F */
+    buf[4] = csum(&buf[0], 4);
+    uart_write(UART_DEV(dev), buf, 5);
   }
   return 1;
 }
@@ -80,16 +118,6 @@ static void rx_cb(void *arg, uint8_t data)
       }
     }
   }
-}
-
-unsigned char csum(unsigned char *in, unsigned char len) 
-{
-  int i;
-  unsigned char cs = 0;
-  for(i=0; i<len; i++) {
-    cs += in[i];
-  }
-  return cs;
 }
 
 void parse_data(unsigned char *buf)
@@ -208,7 +236,11 @@ int main(void)
 			      PARSER_PRIO, 0, parser, NULL, "parser");
   init(dev, baud);
   lidar_version(dev);
-    
+#ifdef CONVERT_TO_I2C
+  /* Module becomes unusable on UART */
+  lidar_set_i2c_addr(dev);
+  lidar_set_i2c(dev);
+#endif    
   /* run the shell */
   char line_buf[SHELL_BUFSIZE];
   shell_run(shell_commands, line_buf, SHELL_BUFSIZE);
