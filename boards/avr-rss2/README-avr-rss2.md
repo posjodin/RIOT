@@ -54,15 +54,23 @@ The board has the following features:
 * Support for Atmel RPC (Reduced Power Consumption) for AtMegaXXXRFR2. 
 * Stable port since many years.
 
-Toolchain
----------
+Toolchain alternative I
+-----------------------
 The Atmel toolcahin is available in most operating systems.
 
+### For Linux
 For a full robust toolchain and easy installation on Ubuntu:\
 apt-get install gcc-avr avr-libc avrdude
 
-Toolchain alternative I
------------------------
+### For MacOS
+On Mac, the Atmel toolchain and avrdude are included in the [CrossPack development environment](https://www.obdev.at/products/crosspack/index.html). 
+It is available as the [HomeBrew "cask" "crosspack-avr"](https://formulae.brew.sh/cask/crosspack-avr).
+
+The RIOT build system relies heavily on GNU Make. GNU Make is not the default "make" program 
+on Mac, so you may need to install it as well. See [HomeBrew Formulae make](https://formulae.brew.sh/formula/make).
+
+Toolchain alternative II
+------------------------
 Otherwise if OS toolchain packages do not support the AtMega256RfR2
 MCU, another option is to download the C compiler toolchain from
 Microchip.
@@ -79,6 +87,8 @@ package](https://formulae.brew.sh/formula/avrdude#default) that can be
 installed with the command `brew install avrdude`. (You first need to
 [install HomeBrew](https://brew.sh).)
 
+On a Mac, you may need to install GNU Make as well and make it your default "make" program. 
+See [HomeBrew Formulae make](https://formulae.brew.sh/formula/make).
 
 Toolchain Windows
 -----------------
