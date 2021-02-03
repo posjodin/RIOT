@@ -3,7 +3,7 @@ Getting Started with RIOT-OS using avr-rss2
 
 Document version
 ----------------
-V1.4 2021-01-25
+V1.5 2021-02-03
 
 This guide's aim is to help you start using RIOT-OS on RSS2 boards
 * Based on MCU AtMega256RFR2 (Board. Rev2.3 and Rev2.4)
@@ -87,7 +87,7 @@ http://fab.cba.mit.edu/classes/863.16/doc/projects/ftsmin/windows_avr.html
 
 Microchip repo:
 ---------------
-https://www.microchip.com/mplab/avr-support/avr-and-arm-toolchains-c-compilers
+https://www.microchip.com/en-us/development-tools-tools-and-software/gcc-compilers-avr-and-arm
 
 avrdude programming tool
 ------------------------
