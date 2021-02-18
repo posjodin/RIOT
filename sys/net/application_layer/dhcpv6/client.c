@@ -337,6 +337,7 @@ static bool _check_status_opt(dhcpv6_opt_status_t *status)
         size_t msg_len = byteorder_ntohs(status->len);
         char msg[msg_len - 1];
 
+        msg[0] = '\0';
         strncpy(msg, status->msg, msg_len - 2);
         DEBUG("DHCPv6 client: server returned error (%u) \"%s\"\n",
               byteorder_ntohs(status->code), msg);
@@ -557,6 +558,7 @@ static bool _parse_reply(uint8_t *rep, size_t len)
         DEBUG("DHCPv6 client: packet too small or transaction ID wrong\n");
         return false;
     }
+    len -= sizeof(dhcpv6_msg_t);
     for (dhcpv6_opt_t *opt = (dhcpv6_opt_t *)(&rep[sizeof(dhcpv6_msg_t)]);
          len > 0; len -= _opt_len(opt), opt = _opt_next(opt)) {
         if (len > orig_len) {
