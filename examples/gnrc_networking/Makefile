@@ -2,7 +2,7 @@
 APPLICATION = gnrc_networking
 
 # If no BOARD is found in the environment, use this default:
-BOARD ?= native
+BOARD ?= avr-rss2
 
 # This has to be the absolute path to the RIOT base directory:
 RIOTBASE ?= $(CURDIR)/../..
@@ -20,6 +20,8 @@ USEMODULE += gnrc_udp
 USEMODULE += gnrc_rpl
 USEMODULE += gnrc_rpl_srh
 USEMODULE += auto_init_gnrc_rpl
+# Autoinit RPL on single interface
+USEMODULE += gnrc_netif_single
 # This application dumps received packets to STDIO using the pktdump module
 USEMODULE += gnrc_pktdump
 # Additional networking modules that can be dropped if not needed
