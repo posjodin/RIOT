@@ -281,6 +281,7 @@ int tx_pkt(gnrc_netif_t *iface)
   gnrc_netif_send(iface, pkt);
   return 1;
 }
+gnrc_netreg_entry_t dump_rime = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL, -1);
 
 int main(void)
 {
@@ -291,13 +292,15 @@ int main(void)
   uint16_t chan = 26;
   //xtimer_ticks32_t last_wakeup = xtimer_now();
  
+#if IS_USED(MODULE_RIME)
 #ifdef MODULE_NETIF
-  gnrc_netreg_entry_t dump = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL, rime_pid);
-  gnrc_netreg_register(GNRC_NETTYPE_UNDEF, &dump);
+  gnrc_netreg_register(GNRC_NETTYPE_UNDEF, &dump_rime);
+  /* Assign rime pid in netreg */
+  gnrc_netreg_entry_init_pid(&dump_rime, GNRC_NETREG_DEMUX_CTX_ALL, rime_pid);
 #endif
-  
-  gnrc_pktdump_init();
-  
+  //gnrc_pktdump_init();
+#endif
+
   /* Get the 802154 interface */
   while ((netif = gnrc_netif_iter(netif))) {
     iface = gnrc_netif_get_by_pid(netif->pid);
