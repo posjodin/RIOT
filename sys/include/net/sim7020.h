@@ -41,6 +41,8 @@ int sim7020_reset(void);
 int sim7020_register(void);
 int sim7020_activate(void);
 int sim7020_status(void);
+int sim7020_imsi(char *buf, int len);
+int sim7020_imei(char *buf, int len);
 int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_callback_arg);
 int sim7020_close(uint8_t sockid);
 int sim7020_connect(const uint8_t sockid, const sock_udp_ep_t *remote);

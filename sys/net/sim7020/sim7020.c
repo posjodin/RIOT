@@ -389,6 +389,36 @@ int sim7020_status(void) {
 }
 
 
+#define MAX_IMSI_LEN 16
+int sim7020_imsi(char *buf, int len) {
+    (void) buf; (void) len;
+    /* Request International Mobile Subscriber Identity */
+    int res = at_send_cmd_get_resp(&at_dev, "AT+CIMI", resp, sizeof(resp), 10*1000000);
+    if (res < 0) {
+        netstats.commfail_count++;
+        return 0;
+    }
+    else {
+        strncpy(buf, resp, len);
+        return strnlen(resp, len);
+    }
+}
+
+#define MAX_IMEI_LEN 17
+int sim7020_imei(char *buf, int len) {
+    (void) buf; (void) len;
+    /* Request International Mobile Subscriber Identity */
+    int res = at_send_cmd_get_resp(&at_dev, "AT+GNS", resp, sizeof(resp), 10*1000000);
+    if (res < 0) {
+        netstats.commfail_count++;
+        return 0;
+    }
+    else {
+        strncpy(buf, resp, len);
+        return strnlen(resp, len);
+    }
+}
+
 int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_callback_arg) {
     /* Create a socket: IPv4, UDP, 1 */
 
