@@ -407,8 +407,8 @@ int sim7020_imsi(char *buf, int len) {
 #define MAX_IMEI_LEN 17
 int sim7020_imei(char *buf, int len) {
     (void) buf; (void) len;
-    /* Request International Mobile Subscriber Identity */
-    int res = at_send_cmd_get_resp(&at_dev, "AT+GNS", resp, sizeof(resp), 10*1000000);
+    /* Request International Mobile Equipment Identity */
+    int res = at_send_cmd_get_resp(&at_dev, "AT+GSN", resp, sizeof(resp), 10*1000000);
     if (res < 0) {
         netstats.commfail_count++;
         return 0;
