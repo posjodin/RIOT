@@ -116,7 +116,7 @@ int sim7020_init(void) {
         printf("sim7020 thread already running\n");
     }
     else {
-        sim7020_pid = thread_create(sim7020_stack, sizeof(sim7020_stack), SIM7020_PRIO, 0,
+        sim7020_pid = thread_create(sim7020_stack, sizeof(sim7020_stack), SIM7020_PRIO, THREAD_CREATE_STACKTEST,
                                     sim7020_thread, NULL, "sim7020");
         if (!pid_is_valid(sim7020_pid)) {
             printf("Could not launch sim7020: %d\n", sim7020_pid);
