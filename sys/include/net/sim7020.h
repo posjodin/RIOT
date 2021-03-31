@@ -31,6 +31,7 @@ typedef struct {
 #define rx_bytes ns.rx_bytes
     uint32_t commfail_count;
     uint32_t reset_count;
+    uint32_t activation_count;
     uint32_t activation_fail_count;    
 } sim7020_netstats_t;
 
