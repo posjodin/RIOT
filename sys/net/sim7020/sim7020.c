@@ -89,8 +89,10 @@ static void _conn_invalidate(void) {
 static uint8_t _conn_alloc(void) {
     uint8_t i;
     for (i = 0; i < SIM7020_MAX_SOCKETS; i++) {
-        if (sim7020_sockets[i].recv_callback == NULL)
+        if (sim7020_sockets[i].recv_callback == NULL) {
+            printf("_conn_alloc %d\n", i);
             return i;
+        }
     }
     printf("No connections\n");
     return SIM7020_NO_SOCKET;
@@ -432,6 +434,7 @@ int sim7020_udp_socket(const sim7020_recv_callback_t recv_callback, void *recv_c
     sock->remote = sock_udp_any;    
     sock->recv_callback = recv_callback;
     sock->recv_callback_arg = recv_callback_arg;
+    printf("sim7020_udp_socket -> %d, callback %x\n", sockid, sock->recv_callback);
     return sockid;
 #else
     int res;
@@ -470,10 +473,8 @@ static int _sock_close(uint8_t sockid) {
     int res;
     char cmd[64];
 
-    return 0;
+    printf("_sock_close %d\n", sockid);
     assert(sockid < SIM7020_MAX_SOCKETS);
-    sim7020_socket_t *sock = &sim7020_sockets[sockid];
-    sock->recv_callback = NULL;
 #ifdef TCPIPSERIALS
     /* Quick close */
     sprintf(cmd, "AT+CIPCLOSE=%d,1", sockid);
@@ -487,7 +488,10 @@ static int _sock_close(uint8_t sockid) {
 int sim7020_close(uint8_t sockid) {
 
     SIM_LOCK();
+    printf("sim7020_close %d\n", sockid);
     int res = _sock_close(sockid);
+    sim7020_socket_t *sock = &sim7020_sockets[sockid];
+    sock->recv_callback = NULL;
     SIM_UNLOCK();
     return res;
 }
@@ -696,6 +700,9 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
 
     assert(sockid < SIM7020_MAX_SOCKETS);
 
+    /* On-demand synchronization of socket state and
+     * module state. Bind and connect if required
+     */
     sim7020_socket_t *sock = &sim7020_sockets[sockid];
     if (sock->flags & MODULE_OOS) {
         _sock_bind(sockid, &sock->local);
@@ -1031,6 +1038,7 @@ static void *sim7020_thread(void *arg) {
             printf("***activate:\n");
             sim7020_activate();
             if (status.state == AT_RADIO_STATE_ACTIVE) {
+                netstats.activation_count++;
                 sim7020_activation_usecs = xtimer_now_usec() - sim7020_activation_usecs;
                 sim7020_active_stamp = xtimer_now_usec64();
                 _acttimer_stop();
