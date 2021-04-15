@@ -91,6 +91,9 @@ NORETURN void core_panic(core_panic_t crash_code, const char *message)
     /* DEVELHELP not set => reboot system */
     pm_reboot();
 #else
+#ifdef PANIC_REBOOT
+    pm_reboot();
+#endif /* PANIC_REBOOT */
     /* DEVELHELP set => power off system */
     /*               or start bootloader */
 #ifdef MODULE_USB_BOARD_RESET
