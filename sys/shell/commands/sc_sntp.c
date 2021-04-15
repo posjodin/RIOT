@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 #include <time.h>
-
+#include "net/gnrc/netif.h"
 #include "net/sntp.h"
 #include "net/ntp_packet.h"
 #include "net/af.h"

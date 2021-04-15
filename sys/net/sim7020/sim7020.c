@@ -271,6 +271,9 @@ int sim7020_register(void) {
         else {
             uint8_t creg;
                 
+#ifndef SCNu8
+#define SCNu8 "hhu"
+#endif
             if (1 == (sscanf(resp, "%*[^:]: %*" SCNu8 ",%" SCNu8, &creg))) {
                 /* Wait for 1 (Registered, home network) or 5 (Registered, roaming) */
                 if (creg == 1 || creg == 5) {
