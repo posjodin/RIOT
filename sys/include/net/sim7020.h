@@ -15,6 +15,11 @@
 #define AT_RADIO_MAX_RECV_LEN 1024
 #endif
 
+/* Timeout in seconds to wait for DNS request to complete. Seems to take around 70 seconds to get error code 8 */
+#ifndef AT_RADIO_RESOLVE_TIMEOUT
+#define AT_RADIO_RESOLVE_TIMEOUT 90
+#endif 
+
 #define SIM7020_MAX_SEND_LEN 768
 
 #define SIM7020_MAX_SOCKETS 6

@@ -58,9 +58,11 @@ static sim7020_netstats_t netstats;
 static sim7020_socket_t sim7020_sockets[SIM7020_MAX_SOCKETS];
 
 mutex_t sim7020_lock = MUTEX_INIT;
-#define P(...) 
-#define SIM_LOCK() {P("LOCK %d: 0x%x\n", __LINE__, sim7020_lock.queue.next); mutex_lock(&sim7020_lock);}
-#define SIM_UNLOCK() {P("UNLOCK %d\n", __LINE__); mutex_unlock(&sim7020_lock);}
+static unsigned int mlockline, munlockline;
+//#define P(...) printf(__VA_ARGS__)
+#define P(...)
+#define SIM_LOCK() {P("LOCK %d: 0x%x\n", __LINE__, sim7020_lock.queue.next); mlockline=__LINE__;mutex_lock(&sim7020_lock);}
+#define SIM_UNLOCK() {P("UNLOCK %d\n", __LINE__); munlockline=__LINE__;mutex_unlock(&sim7020_lock);}
 
 /* at_process_urc() allocates line buffer on stack, 
  * so make sure there is room for it
@@ -525,9 +527,17 @@ int _sock_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
     /* Create a socket: IPv4, UDP, 1 */
     SIM_LOCK();
     res = at_send_cmd(&at_dev, cmd, 10*1000000);
-    do {
+    while (1) {
         res = at_readline(&at_dev, resp, sizeof(resp), 0, 10*1000000);
-    } while ((res >= 0) && (strstr(resp, "CONNECT OK") == NULL) && (strstr(resp, "ALREADY CONNECT") == NULL));
+        if (res < 0)
+            break;
+        if ((strstr(resp, "CONNECT OK") != NULL) || (strstr(resp, "ALREADY CONNECT") != NULL))
+            break;
+        if (strstr(resp, "ERROR") != NULL) {
+            res = -1;
+            break;
+        }
+    }
     SIM_UNLOCK();
     if (res < 0) {
         return res;
@@ -608,7 +618,6 @@ int sim7020_connect(uint8_t sockid, const sock_udp_ep_t *remote) {
 static int _sock_bind(uint8_t sockid, const sock_udp_ep_t *local) {
 
 #ifdef SIM7020_BIND_ENABLE
-    SIM_LOCK();
     printf("binding to to ipv6 mapped ");
     ipv6_addr_print((ipv6_addr_t *) &local->addr.ipv6);
     printf(":%u\n", local->port);
@@ -617,12 +626,13 @@ static int _sock_bind(uint8_t sockid, const sock_udp_ep_t *local) {
     char cmd[64];
 #ifdef TCPIPSERIALS    
     snprintf(cmd, sizeof(cmd), "AT+CLPORT=%hu,\"UDP\",%hu",sockid, local->port);
+    SIM_LOCK();
     res = at_send_cmd_wait_ok(&at_dev, cmd, 10*1000000);
     SIM_UNLOCK();
     if (res < 0) {
-        SIM_UNLOCK();
         return res;
     }
+    SIM_LOCK();
     at_drain(&at_dev);
     res = at_send_cmd(&at_dev, "AT+CLPORT?", 10*1000000);
     do {
@@ -708,8 +718,10 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
      */
     sim7020_socket_t *sock = &sim7020_sockets[sockid];
     if (sock->flags & MODULE_OOS) {
-        _sock_bind(sockid, &sock->local);
-        _sock_connect(sockid, &sock->remote);
+        if ((res = _sock_bind(sockid, &sock->local)) < 0)
+            goto fail;
+        if ((res = _sock_connect(sockid, &sock->remote)) < 0)
+            goto fail;
         sock->flags &= ~MODULE_OOS;
     }
     SIM_LOCK();
@@ -834,11 +846,13 @@ int sim7020_resolve(const char *domain, char *result) {
     at_add_urc(&at_dev, &urc);
     
     timeout_timer.callback = _resolve_timeout_cb;
-    xtimer_set(&timeout_timer, 10*1000000U);
+    xtimer_set(&timeout_timer, AT_RADIO_RESOLVE_TIMEOUT*1000000U);
 
     SIM_LOCK();
     /* Check signal quality */
     (void) at_send_cmd_wait_ok(&at_dev, "AT+CSQ", 10*1000000);
+    (void) at_send_cmd_wait_ok(&at_dev, "AT+CDNSCFG?", 10*1000000);
+
     SIM_UNLOCK();
 
     char cmd[64];
@@ -1069,6 +1083,11 @@ int sim7020_active(void) {
 
 int sim7020_at(const char *cmd) {
     printf("Do command '%s'\n", cmd);
+    if (sim7020_lock.queue.next) {
+        printf("Warning: mutex locked on line %u (last unlock line %u)\n", mlockline, munlockline);
+    }
+    else
+        printf("Mutex not locked\n");
     SIM_LOCK();
     at_send_cmd(&at_dev, cmd, 10*1000000);
     SIM_UNLOCK();
