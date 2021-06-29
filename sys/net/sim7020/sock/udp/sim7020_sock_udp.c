@@ -40,12 +40,10 @@ static void _input_callback(void *p,
 typedef void (* udp_socket_input_callback_t)(sock_udp_t *c,
                             const uint8_t *data, uint16_t datalen);
 
-#define STARTPORT 
 uint16_t _get_dyn_port(void) {
     static uint16_t index = 0;
     uint16_t portno = index + IANA_DYNAMIC_PORTRANGE_MIN;
     index = (index + 1) % (IANA_DYNAMIC_PORTRANGE_MAX - IANA_DYNAMIC_PORTRANGE_MIN + 1);
-    printf("Alloc dyn port %d\n", portno);
     return portno;
 }
 
