@@ -92,6 +92,7 @@ NORETURN void core_panic(core_panic_t crash_code, const char *message)
     pm_reboot();
 #else
 #ifdef PANIC_REBOOT
+    LOG_ERROR("panic reboot...\n");
     pm_reboot();
 #endif /* PANIC_REBOOT */
     /* DEVELHELP set => power off system */
