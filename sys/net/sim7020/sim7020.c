@@ -724,14 +724,9 @@ int sim7020_send(uint8_t sockid, uint8_t *data, size_t datalen) {
             goto fail;
         sock->flags &= ~MODULE_OOS;
     }
-    SIM_LOCK();
-    /* Check signal quality */
-    (void) at_send_cmd_wait_ok(&at_dev, "AT+CSQ", 10*1000000);
-    SIM_UNLOCK();
 
     SIM_LOCK();
     at_drain(&at_dev);
-
 #ifdef TCPIPSERIALS
 
     snprintf(cmd, sizeof(cmd), "AT+CIPSEND=%u,%u", sockid, len);
